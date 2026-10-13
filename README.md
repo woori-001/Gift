@@ -24,12 +24,13 @@
 ## 폴더 구성
 
 ```
-index.html                화면
-css/style.css             스타일
+index.html                화면 (로그인·사이드바·본문 틀)
+css/style.css             스타일 (upche-meeting 업체회의 누적분석과 같은 디자인 체계)
+img/wavenet.png           WAVENET 로고
 js/config.js              Supabase URL·publishable 키 (공개용 값)
 js/engine.js              검수 엔진 (파일 해석·매칭·판정). 브라우저/Node 공용
 js/api.js                 Supabase RPC 호출
-js/app.js                 화면 동작
+js/app.js                 화면 그리기·동작
 supabase/migrations/      DB 스키마·RLS·함수 (적용 완료된 마이그레이션)
 test/engine.test.js       엔진 단위 테스트 (가상 데이터)
 ```
