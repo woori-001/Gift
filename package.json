@@ -1,0 +1,10 @@
+{
+  "name": "gift-audit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "사은품 차감 검수 웹앱 (정산내역서 vs 현재 로우데이터 대조)",
+  "scripts": {
+    "test": "node --test test/engine.test.js",
+    "start": "npx --yes serve -l 5173 ."
+  }
+}
