@@ -30,7 +30,8 @@ var Engine = (function () {
   }
   // 가입서비스: '(★상품권,문자)z!652.../02-...' 처럼 앞뒤에 붙는 괄호 메모·기호·공백은 떼고 비교
   function normSvc(v) {
-    return s(v).replace(/[\(\[\{【<][^\)\]\}】>]*[\)\]\}】>]/g, '').replace(/[★☆\s]/g, '').toUpperCase();
+    // 괄호 메모, 한글 메모(후첨부·선약·합 등), 기호·공백·하이픈을 떼고 번호만 남김
+    return s(v).replace(/[\(\[\{【<][^\)\]\}】>]*[\)\]\}】>]/g, '').replace(/[가-힣ㄱ-ㅎㅏ-ㅣ]/g, '').replace(/[★☆\s\-]/g, '').toUpperCase();
   }
   // '/'·','로 나뉜 번호 조각 (z!65252735872 / 02-040-2907)
   function svcTokens(v) { return normSvc(v).split(/[\/,|]/).filter(function (x) { return x.length >= 6; }); }
@@ -153,7 +154,8 @@ var Engine = (function () {
       var cands = (idx[keyFn(st)] || []).filter(function (r) { return !r._used; });
       var byName = cands.filter(function (r) { return nameFn(r.고객명, st.고객명); });
       var note = tag;
-      if (!byName.length && allowPartnerFallback) {
+      // 이름이 안 맞을 때 협력점만으로 잇는 건, 가입서비스 번호가 제대로 있을 때만 (번호가 비면 다른 고객끼리 엮일 수 있음)
+      if (!byName.length && allowPartnerFallback && normSvc(st.가입서비스).length >= 6) {
         byName = cands.filter(function (r) { return r._partner === st._partner; });
         if (byName.length) note = (note ? note + ', ' : '') + '고객명 다름';
       }
@@ -165,7 +167,10 @@ var Engine = (function () {
     return pairs;
   }
 
-  // 마지막 단계: 가입서비스 번호 조각이 하나라도 같고, 정산구분·상품명이 같으며, 이름(느슨하게)이나 협력점이 같으면 같은 건
+  // 마지막 단계: 가입서비스만 다르고 협력점·정산구분·상품·옵션·개통일이 같으며 이름도 같은 건 (SKB 번호 끝자리 변경 등)
+  function sameItemKey(r) { return [r._partner, r.정산종류, r.상품명, r.상품옵션, r.개통일].join('|'); }
+
+  // 가입서비스 번호 조각이 하나라도 같고, 정산구분·상품명이 같으며, 이름(느슨하게)이나 협력점이 같으면 같은 건
   function tokenPass(stmtRows, rawRows) {
     var idx = {};
     rawRows.forEach(function (r) {
@@ -203,7 +208,8 @@ var Engine = (function () {
     stmtRows.forEach(function (r) { r._used = false; });
     var pairs = matchPass(stmtRows, rawRows, keyOf, true, '')
       .concat(matchPass(stmtRows, rawRows, key2Of, false, '개통일·상품옵션 변경', nameLoose))
-      .concat(tokenPass(stmtRows, rawRows));
+      .concat(tokenPass(stmtRows, rawRows))
+      .concat(matchPass(stmtRows, rawRows, sameItemKey, false, '가입서비스 번호 다름', nameLoose));
 
     var undeducted = [], changed = [];
     pairs.forEach(function (p) {

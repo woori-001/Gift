@@ -96,3 +96,25 @@ test('정산서 회차와 다른 정산예정일의 로우는 누락으로 잡�
   assert.strictEqual(res.missing.length, 0);
   assert.strictEqual(res.otherRound.count, 1);
 });
+
+test('가입서비스 앞 한글 메모(후첨부·선약)가 달라도 매칭', () => {
+  const st = toRecords([row({ 고객명: '김미령', 가입서비스: '후첨부(유심)합8982 3009 2500 9096 633', 상품명: '모바일_KT', 상품옵션: '가족동판(UIT)', 개통일: '2026-09-04' })]);
+  const raw = toRecords([row({ 고객명: '김*령', 가입서비스: '(유심)합8982 3009 2500 9096 633', 상품명: '모바일_KT', 상품옵션: '가족동판1(UIT)', 개통일: '2026-09-04' })]);
+  const res = Engine.run(raw, st);
+  assert.strictEqual(res.pairs.length, 1);
+});
+
+test('가입서비스 번호만 바뀌고 나머지가 같으면 매칭(가입서비스 번호 다름)', () => {
+  const st = toRecords([row({ 고객명: '이수진', 가입서비스: '7430558884', 상품명: 'SKB_TV', 상품옵션: '스탠다드' })]);
+  const raw = toRecords([row({ 고객명: '이*진', 가입서비스: '7430558885', 상품명: 'SKB_TV', 상품옵션: '스탠다드' })]);
+  const res = Engine.run(raw, st);
+  assert.strictEqual(res.pairs.length, 1);
+  assert.strictEqual(res.pairs[0].note, '가입서비스 번호 다름');
+});
+
+test('가입서비스가 비어 있으면 이름이 다른 고객끼리 협력점만으로 엮지 않음', () => {
+  const st = toRecords([row({ 고객명: '주민태', 가입서비스: '', 상품명: 'SKB_추가지급' })]);
+  const raw = toRecords([row({ 고객명: '김*수', 가입서비스: '', 상품명: 'SKB_추가지급' })]);
+  const res = Engine.run(raw, st);
+  assert.strictEqual(res.pairs.length, 0);
+});
