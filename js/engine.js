@@ -145,7 +145,14 @@ var Engine = (function () {
     return pairs;
   }
 
-  function run(rawRows, stmtRows) {
+  // 자점(직영): 협력점명이 '1.시흥영업팀'처럼 번호+점으로 시작하면 검수 대상에서 뺌
+  function isOwnBranch(p) { return /^\d+\s*\./.test(normPartner(p)); }
+
+  function run(rawRowsAll, stmtRowsAll) {
+    var own = {}, ownRaw = 0, ownSt = 0;
+    var rawRows = rawRowsAll.filter(function (r) { if (isOwnBranch(r.협력점)) { own[r._partner] = (own[r._partner] || 0) + 1; ownRaw++; return false; } return true; });
+    var stmtRows = stmtRowsAll.filter(function (r) { if (isOwnBranch(r.협력점)) { own[r._partner] = own[r._partner] || 0; ownSt++; return false; } return true; });
+    var excluded = { partners: Object.keys(own).sort(), raw: ownRaw, stmt: ownSt };
     rawRows.forEach(function (r) { r._used = false; });
     stmtRows.forEach(function (r) { r._used = false; });
     var pairs = matchPass(stmtRows, rawRows, keyOf, true, '')
@@ -212,9 +219,9 @@ var Engine = (function () {
     var partners = Object.keys(parts).map(function (k) { return parts[k]; })
       .sort(function (a, b) { return b.undAmt - a.undAmt || b.miss - a.miss || a.name.localeCompare(b.name); });
 
-    return { pairs: pairs, undeducted: undeducted, missing: missing, stmtOnly: stmtOnly, changed: changed, checks: checks, partners: partners };
+    return { excluded: excluded, rawCount: rawRows.length, stmtCount: stmtRows.length, pairs: pairs, undeducted: undeducted, missing: missing, stmtOnly: stmtOnly, changed: changed, checks: checks, partners: partners };
   }
 
-  return { htmlToGrid: htmlToGrid, gridToRecords: gridToRecords, run: run, paidByUs: paidByUs, normPartner: normPartner, nameMatch: nameMatch, DED: DED };
+  return { htmlToGrid: htmlToGrid, gridToRecords: gridToRecords, run: run, paidByUs: paidByUs, normPartner: normPartner, isOwnBranch: isOwnBranch, nameMatch: nameMatch, DED: DED };
 })();
 if (typeof module !== 'undefined') module.exports = Engine;

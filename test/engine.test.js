@@ -57,3 +57,18 @@ test('정산서(HTML .xls) 헤더 2줄과 합계행을 처리', () => {
   assert.strictEqual(recs[0].현금, 400000);
   assert.strictEqual(recs[0]._partner, '가상');
 });
+
+test('자점(번호.이름 협력점)은 검수 대상에서 뺀다', () => {
+  const st = toRecords([row({ 고객명: '가나다', 가입서비스: 'z!5', 상품명: 'KT_인터넷', 협력점: '★가상○', 약정금액: 100000 })]);
+  const raw = toRecords([
+    row({ 고객명: '가*다', 가입서비스: 'z!5', 상품명: 'KT_인터넷', 협력점: '★가상○', 약정금액: 100000 }),
+    row({ 고객명: '라*바', 가입서비스: 'z!6', 상품명: 'KT_TV', 협력점: '1.시흥영업팀', 약정금액: 50000, 사은품지급처: '웨이브넷 지급', 현금: 100000 }),
+    row({ 고객명: '사*자', 가입서비스: 'z!7', 상품명: 'KT_TV', 협력점: '★12.천안영업팀●', 약정금액: 50000 })]);
+  const res = Engine.run(raw, st);
+  assert.strictEqual(res.missing.length, 0, '자점 건은 누락으로 잡지 않음');
+  assert.strictEqual(res.checks.length, 0);
+  assert.strictEqual(res.excluded.raw, 2);
+  assert.deepStrictEqual(res.excluded.partners, ['1.시흥영업팀', '12.천안영업팀']);
+  assert.ok(!res.partners.some(p => /^\d+\./.test(p.key)));
+  assert.strictEqual(Engine.isOwnBranch('★(휴)가상○'), false);
+});

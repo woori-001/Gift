@@ -123,11 +123,11 @@
         '</div>' +
         '<hr class="side-hr">' + info +
         '<details class="side-help"><summary>' + ic('info', 14) + '판정 기준<span class="chev">▼</span></summary><div class="hl">' +
-          helpItem('c-red', '① 미차감', '현재 로우가 웨이브넷 지급인데 정산서의 사은품 차감이 그보다 적은 건', '환수액 = 현재 지급액 − 정산서 차감') +
-          helpItem('c-orange', '② 정산서 누락', '로우에는 있는데 올린 정산서 어디에도 없는 건') +
-          helpItem('c-violet', '③ 정산서에만', '정산서에는 있는데 지금 로우에서 사라진 건') +
-          helpItem('c-blue', '④ 금액 변동', '약정·번들·동판·다른 차감이 정산 후 바뀐 건') +
-          helpItem('c-green', '⑤ 확인 필요', '유치자지급인데 금액 입력, 웨이브넷 지급인데 차감 부족, 동일 행 중복') +
+          helpItem('c-red', '미차감', '현재 로우가 웨이브넷 지급인데 정산서의 사은품 차감이 그보다 적은 건', '환수액 = 현재 지급액 − 정산서 차감') +
+          helpItem('c-orange', '정산서 누락', '로우에는 있는데 올린 정산서 어디에도 없는 건') +
+          helpItem('c-violet', '정산서에만', '정산서에는 있는데 지금 로우에서 사라진 건') +
+          helpItem('c-blue', '금액 변동', '약정·번들·동판·다른 차감이 정산 후 바뀐 건') +
+          helpItem('c-green', '확인 필요', '유치자지급인데 금액 입력, 웨이브넷 지급인데 차감 부족, 동일 행 중복') +
           '<div class="hi"><i class="c-blue" style="opacity:.4"></i><div><b>매칭 기준</b><p>정산구분 + 가입서비스 + 상품명 + 상품옵션 + 개통일 + 고객명(*는 아무 글자). 협력점명은 기호·(휴)를 떼고 비교</p></div></div>' +
         '</div></details>' +
       '</div>' +
@@ -372,12 +372,6 @@
           '<button class="linkb" id="bDemo">예시 데이터로 둘러보기</button></span>' +
           '<button class="primary" id="bRun"' + (ready ? '' : ' disabled') + '>' + ic('play', 14) + '검수 실행</button></div>' +
       '</div>' +
-      '<div class="rules">' +
-        ruleCard('c3', 'alert', '① 미차감', '현재 로우에서 웨이브넷이 사은품을 지급했는데, 정산서의 사은품 차감이 그보다 적은 건. 차액이 환수 대상이에요.') +
-        ruleCard('c5', 'file', '② 정산서 누락', '로우에는 있는데 정산서 어디에도 없는 건. 일반·추가·환수로 나눠 보여줘요.') +
-        ruleCard('c4', 'minus', '③ 정산서에만', '정산서에는 있는데 현재 로우에서 사라진 건.') +
-        ruleCard('c1', 'trend', '④ 금액 변동', '약정·번들·동판·다른 차감 항목이 정산 후 바뀐 건.') +
-        ruleCard('c2', 'info', '⑤ 확인 필요', '로우 자체가 이상한 건. 지급처·금액 불일치, 동일 행 중복.') +
       '</div>';
     $('bRaw').addEventListener('click', function () { $('fRaw').click(); });
     $('bSt').addEventListener('click', function () { $('fSt').click(); });
@@ -411,7 +405,6 @@
       }).then(function () { renderUpload(); }).catch(fail);
     });
   }
-  function ruleCard(c, icon, t, p) { return '<div class="rule"><div class="kt"><span class="ib ' + c + '">' + ic(icon) + '</span>' + t + '</div><p>' + p + '</p></div>'; }
   function summarizeDates(rows) {
     var c = {}; rows.forEach(function (r) { var d = r.정산예정일 || '없음'; c[d] = (c[d] || 0) + 1; });
     var ks = Object.keys(c).sort(function (a, b) { return c[b] - c[a]; });
@@ -429,7 +422,8 @@
       var dates = {}; raw.forEach(function (r) { if (r.정산예정일) dates[r.정산예정일] = (dates[r.정산예정일] || 0) + 1; });
       res.meta = {
         settleDate: Object.keys(dates).sort(function (a, b) { return dates[b] - dates[a]; })[0] || '',
-        rawFile: state.rawName, stmtFiles: okStmts().length, rawRows: raw.length, stmtRows: stRows.length, matched: res.pairs.length
+        rawFile: state.rawName, stmtFiles: okStmts().length, rawRows: res.rawCount, stmtRows: res.stmtCount, matched: res.pairs.length,
+        excluded: res.excluded
       };
       res.notes = buildNotes(raw, stRows, res);
       state.res = res; state.saved = false; state.showResult = true;
@@ -450,8 +444,8 @@
     var noSt = state.res.partners.filter(function (p) { return p.stmt === 0 && p.raw > 0; });
     if (!noSt.length) return null;
     var n = noSt.reduce(function (a, p) { return a + p.raw; }, 0);
-    return ['info', '정산내역서가 없는 협력점 <b>' + noSt.length + '곳(' + won(n) + '건)</b>은 누락 목록에서 ' + (state.mode === 'saved' ? '저장하지 않았어요' : '기본으로 숨겼어요') + '. 정산서가 안 나간 곳인지, 파일을 덜 올린 건지 확인하세요: ' +
-      noSt.slice(0, 12).map(function (p) { return esc(p.key); }).join(', ') + (noSt.length > 12 ? ' 외 ' + (noSt.length - 12) + '곳' : '')];
+    return ['info', '정산내역서가 없는 협력점 <b>' + noSt.length + '곳(' + won(n) + '건)</b>은 누락 목록에서 ' + (state.mode === 'saved' ? '저장하지 않았어요' : '기본으로 숨겼어요') + '. 정산서가 안 나간 곳인지, 파일을 덜 올린 건지 확인하세요.<span class="rnames">' +
+      noSt.slice(0, 20).map(function (p) { return esc(p.key); }).join(', ') + (noSt.length > 20 ? ' 외 ' + (noSt.length - 20) + '곳' : '') + '</span>'];
   }
 
   /* ═════════════ 탭 정의 ═════════════ */
@@ -490,12 +484,11 @@
         { h: '구분', v: function (x) { return x.raw.정산종류; }, html: function (x) { return typeTag(x.raw.정산종류); } },
         { h: '고객명', v: function (x) { return x.raw.고객명; } },
         { h: '가입서비스 / 상품', v: function (x) { return x.raw.가입서비스; }, html: svcCell },
-        { h: '개통일', v: function (x) { return x.raw.개통일; }, cls: 'mono' },
-        { h: '정산서 지급처', v: function (x) { return x.st.사은품지급처; } },
-        { h: '현재 지급처', v: function (x) { return x.raw.사은품지급처; } },
+        { h: '미차감액', num: true, v: function (x) { return x.gap; }, cls: 'amt' },
         { h: '현재 지급액', num: true, v: function (x) { return x.paid; } },
         { h: '정산서 차감', num: true, v: function (x) { return x.stDed; } },
-        { h: '미차감액', num: true, v: function (x) { return x.gap; }, cls: 'amt' },
+        { h: '정산서 → 현재 지급처', v: function (x) { return (x.st.사은품지급처 || '미입력') + ' → ' + x.raw.사은품지급처; }, html: function (x) { return '<span class="dim">' + esc(x.st.사은품지급처 || '미입력') + '</span><span class="arrow">→</span>' + esc(x.raw.사은품지급처); } },
+        { h: '개통일', v: function (x) { return x.raw.개통일; }, cls: 'mono' },
         { h: '지급완료일', v: function (x) { return x.raw.지급완료; }, cls: 'mono' },
         { h: '사유', v: function (x) { return x.reason + (x.note ? ' / ' + x.note : ''); }, cls: 'wrap' }
       ],
@@ -576,7 +569,7 @@
           '<button class="ghost" id="bExport">' + ic('export') + '엑셀 받기</button>' +
           (state.mode === 'live' ? '<button class="primary" id="bSave"' + (canSave ? '' : ' disabled') + '>' + ic(state.saved ? 'check' : 'save') + (state.saved ? '저장됨' : '결과 저장') + '</button>' : '') +
         '</div></div>' +
-      '<div class="notes" id="notes"></div>' +
+      '<div class="rlay"><div class="rmain">' +
       '<div class="kpis k5" id="kpis"></div>' +
       '<div class="card">' +
         '<div class="tabs" id="tabs"></div>' +
@@ -590,7 +583,8 @@
         '<p class="desc" id="tabDesc"></p>' +
         '<div class="tw"><table class="t" id="tbl"><thead></thead><tbody></tbody></table></div>' +
         '<div class="more" id="more" hidden></div>' +
-      '</div>';
+      '</div>' +
+      '</div><aside class="rail" id="rail"></aside></div>';
     $('bNew').addEventListener('click', function () {
       if (state.mode !== 'live') { state.res = null; state.mode = 'live'; state.savedRun = null; if (state.rawName === '예시 로우데이터') { state.raw = null; state.stmts = []; } }
       state.showResult = false; renderSide(); renderUpload();
@@ -612,21 +606,37 @@
   function renderResultBody() { renderKpis(); renderTabs(); renderTable(); }
 
   function renderNotes() {
-    var out = (state.res.notes || []).slice(), n = noStNote(); if (n) out.push(n);
+    var r = state.res, m = r.meta, out = (r.notes || []).slice(), n = noStNote(); if (n) out.push(n);
+    var ex = m.excluded;
+    if (ex && (ex.raw || ex.stmt)) out.push(['own', '자점 <b>' + ex.partners.length + '곳</b>(로우 ' + won(ex.raw) + '건' + (ex.stmt ? ' · 정산서 ' + won(ex.stmt) + '건' : '') + ')은 검수에서 뺐어요.' +
+      '<span class="rnames">' + ex.partners.map(esc).join(', ') + '</span>']);
     var html = '';
-    if (state.mode === 'demo') html += '<div class="foot-note demo">' + ic('info') + '<span class="sp">지금 보이는 건 가상의 예시 데이터예요. 저장되지 않아요.</span><button class="linkb" id="bDemoClear">예시 지우기</button></div>';
+    if (state.mode === 'demo') html += '<div class="rcard rdemo"><div class="rh">' + ic('info') + '<b>예시 데이터</b></div><p>가상의 예시예요. 저장되지 않아요.</p><button class="linkb" id="bDemoClear">예시 지우기</button></div>';
     if (state.mode === 'saved') {
       var run = state.savedRun;
-      html += '<div class="foot-note saved" id="savedNote">' + ic('cal') + '<span class="sp"><b>' + esc(run.at) + '</b> · ' + esc(run.by) + ' 저장' + (run.memo ? ' · ' + esc(run.memo) : '') + '</span><button class="linkb" id="bMemo">' + (run.memo ? '메모 고치기' : '메모 남기기') + '</button></div>';
+      html += '<div class="rcard rsaved" id="savedNote"><div class="rh">' + ic('cal') + '<b>저장된 기록</b></div>' +
+        '<p>' + esc(run.at) + ' · ' + esc(run.by) + '</p>' + (run.memo ? '<p class="rmemo">' + esc(run.memo) + '</p>' : '') +
+        '<button class="linkb" id="bMemo">' + (run.memo ? '메모 고치기' : '메모 남기기') + '</button></div>';
     }
-    html += out.map(function (x) { return '<div class="foot-note ' + x[0] + '">' + ic(x[0] === 'warn' ? 'alert' : 'info') + '<span>' + x[1] + '</span></div>'; }).join('');
-    $('notes').innerHTML = html; $('notes').hidden = !html;
+    html += '<div class="rcard"><div class="rh">' + ic('sheet') + '<b>회차 정보</b></div><dl class="rinfo">' +
+      '<dt>정산예정일</dt><dd>' + esc(m.settleDate || '–') + '</dd>' +
+      '<dt>로우데이터</dt><dd>' + won(m.rawRows) + '건' + (m.rawFile ? '<small>' + esc(m.rawFile) + '</small>' : '') + '</dd>' +
+      '<dt>정산내역서</dt><dd>' + won(m.stmtFiles) + '개 · ' + won(m.stmtRows) + '건</dd>' +
+      '<dt>매칭</dt><dd>' + won(m.matched) + '건</dd>' +
+      (ex && ex.raw ? '<dt>자점 제외</dt><dd>' + won(ex.raw) + '건</dd>' : '') +
+      '</dl></div>';
+    html += '<div class="rcard"><div class="rh">' + ic('alert') + '<b>확인할 점</b>' + (out.length ? '<span class="snum">' + out.length + '</span>' : '') + '</div>' +
+      (out.length ? '<div class="rnotes">' + out.map(function (x) {
+        return '<div class="rnote ' + x[0] + '">' + ic(x[0] === 'warn' ? 'alert' : x[0] === 'own' ? 'minus' : 'info', 15) + '<div>' + x[1] + '</div></div>';
+      }).join('') + '</div>' : '<p class="rnone">' + ic('check', 14) + '특별히 확인할 점이 없어요.</p>') + '</div>';
+    $('rail').innerHTML = html;
     if ($('bDemoClear')) $('bDemoClear').addEventListener('click', function () { state.res = null; state.mode = 'live'; state.raw = null; state.stmts = []; state.rawName = ''; renderSide(); renderMain(); });
     if ($('bMemo')) $('bMemo').addEventListener('click', editSavedMemo);
   }
   function editSavedMemo() {
     var run = state.savedRun, box = $('savedNote');
-    box.innerHTML = ic('edit') + '<input class="memo-in" id="memoIn" maxlength="1000" placeholder="메모"><button class="primary sm" id="memoOk" style="padding:6px 12px">저장</button><button class="ghost sm" id="memoNo">취소</button>';
+    box.innerHTML = '<div class="rh">' + ic('edit') + '<b>메모</b></div><textarea class="memo-in" id="memoIn" rows="3" maxlength="1000" placeholder="메모"></textarea>' +
+      '<div class="mfoot" style="margin-top:8px"><button class="ghost sm" id="memoNo">취소</button><button class="primary sm" id="memoOk">저장</button></div>';
     $('memoIn').value = run.memo || ''; $('memoIn').focus();
     $('memoNo').addEventListener('click', renderNotes);
     $('memoOk').addEventListener('click', function () {
