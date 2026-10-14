@@ -257,12 +257,6 @@ var Engine = (function () {
       if (/유치자/.test(r.사은품지급처) && r.현금 > 0) checks.push({ raw: r, why: '지급처는 유치자지급인데 금액 ' + r.현금.toLocaleString() + '원 입력' });
       if (r.정산종류 === '일반' && paidByUs(r) > r.차감내역_사은품) checks.push({ raw: r, why: '웨이브넷 지급 ' + paidByUs(r).toLocaleString() + '원인데 현재 로우 사은품 차감 ' + r.차감내역_사은품.toLocaleString() + '원' });
     });
-    var seen = {};
-    rawRows.forEach(function (r) {
-      var k = [keyOf(r), r.고객명, NUM_FIELDS.map(function (f) { return r[f]; }).join(',')].join('#');
-      if (seen[k]) checks.push({ raw: r, why: '같은 정산구분으로 모든 금액이 같은 행이 2줄 이상 (' + r.정산종류 + ')' });
-      seen[k] = 1;
-    });
 
     // 협력점 요약
     var parts = {};

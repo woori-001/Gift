@@ -127,7 +127,7 @@
           helpItem('c-orange', '정산서 누락', '로우에는 있는데 올린 정산서 어디에도 없는 건') +
           helpItem('c-violet', '정산서에만', '정산서에는 있는데 지금 로우에서 사라진 건') +
           helpItem('c-blue', '금액 변동', '약정·번들·동판·다른 차감이 정산 후 바뀐 건') +
-          helpItem('c-green', '확인 필요', '유치자지급인데 금액 입력, 웨이브넷 지급인데 차감 부족, 동일 행 중복') +
+          helpItem('c-green', '확인 필요', '유치자지급인데 금액 입력, 웨이브넷 지급인데 차감 부족') +
           '<div class="hi"><i class="c-blue" style="opacity:.4"></i><div><b>매칭 기준</b><p>정산구분 + 가입서비스 + 상품명 + 상품옵션 + 개통일 + 고객명(*는 아무 글자). 협력점명은 기호·(휴)를 떼고 비교</p></div></div>' +
         '</div></details>' +
       '</div>' +
@@ -547,7 +547,7 @@
       ],
       filter: baseFilter
     },
-    chk: { label: '확인 필요', desc: '정산서와 상관없이 현재 로우 자체에서 이상해 보이는 건이에요. 추단처럼 정상인 중복도 있으니 확인만 하시면 돼요.',
+    chk: { label: '확인 필요', desc: '정산서와 상관없이 현재 로우 자체에서 이상해 보이는 건이에요. 지급처와 금액이 맞지 않거나, 웨이브넷이 지급했는데 차감이 부족한 건이에요.',
       rows: function () { return state.res.checks; }, typed: true,
       cols: [
         { h: '협력점', v: function (x) { return x.raw._partner; }, html: function (x) { return '<b>' + esc(x.raw._partner) + '</b>'; } },
