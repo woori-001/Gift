@@ -46,7 +46,8 @@
     res: null, mode: 'live',          // live | demo | saved
     savedRun: null, saved: false,     // saved: 지금 결과를 저장했는지
     tab: 'partners', q: '', partner: '', type: '', noSt: false, paidOnly: false, sort: null, limit: 300,
-    histCount: null
+    histCount: null,
+    work: null, works: [], sync: null   // 작업 중인 회차(이어하기)
   };
 
   /* ═════════════ 인증 ═════════════ */
@@ -61,6 +62,12 @@
     $('login').hidden = true; $('app').hidden = false;
     renderSide(); renderMain();
     refreshHistCount();
+    refreshWorks().then(function (list) {
+      var id = remembered();
+      var hit = id && list.filter(function (w) { return w.id === id; })[0];
+      if (hit && !state.raw && !state.stmts.length && !state.res) loadWork(hit.id);
+      else if (state.view === 'check' && !state.res) renderUpload();
+    });
   }
   function authFail(err) { if (err && err.auth) { showLogin(err.message); return true; } return false; }
   function fail(err) { if (!authFail(err)) toast(esc(err.message || String(err)), 6000); }
@@ -102,6 +109,7 @@
         '</div>';
     } else {
       info = '<div class="side-info">' +
+        (state.work ? '<div><span>작업 회차</span><b>' + esc(state.work.settleDate) + '</b></div>' : '') +
         '<div><span>로우데이터</span><b>' + (state.raw ? won(state.raw.length) + '건' : '<span class="st-warn">없음</span>') + '</b></div>' +
         '<div><span>정산내역서</span><b>' + (okStmts().length ? okStmts().length + '개' : '<span class="st-warn">없음</span>') + '</b></div>' +
         '</div>';
@@ -135,7 +143,7 @@
     });
     if ($('bAcc')) $('bAcc').addEventListener('click', openAccounts);
     $('bPw').addEventListener('click', function () { openPwModal(false); });
-    $('bOut').addEventListener('click', function () { Api.logout().then(function () { showLogin(''); }); });
+    $('bOut').addEventListener('click', function () { Api.logout().then(function () { state.work = null; state.raw = null; state.stmts = []; state.res = null; state.sync = null; showLogin(''); }); });
   }
   function helpItem(c, t, p, f) { return '<div class="hi"><i class="' + c + '"></i><div><b>' + t + '</b><p>' + p + '</p>' + (f ? '<p class="f">' + f + '</p>' : '') + '</div></div>'; }
 
@@ -171,6 +179,85 @@
   }
   function okStmts() { return state.stmts.filter(function (s) { return !s.error; }); }
 
+  /* ═════════════ 작업 이어하기 (올린 파일을 회차별로 서버에 자동 저장) ═════════════ */
+  var WORK_KEY = 'gift_audit_work';
+  var FIELDS = ['No', '정산종류', '고객명', '가입서비스', '상품명', '상품옵션', '협력점', '유치자', '접수일', '개통일', '개통상태',
+    '정산예정일', '정산완료일', '지급예정', '지급완료', '사은품지급처', '사은품', '현금', '약정금액']
+    .concat(Engine.DED.map(function (d) { return '차감내역_' + d; }), ['수납', '번들수수료', '동판수수료', '정산금액']);
+  function remember(id) { try { if (id) localStorage.setItem(WORK_KEY, id); else localStorage.removeItem(WORK_KEY); } catch (e) {} }
+  function remembered() { try { return localStorage.getItem(WORK_KEY); } catch (e) { return null; } }
+  function topDate(rows) {
+    var c = {}; rows.forEach(function (r) { if (r.정산예정일) c[r.정산예정일] = (c[r.정산예정일] || 0) + 1; });
+    return Object.keys(c).sort(function (a, b) { return c[b] - c[a]; })[0] || '';
+  }
+  function hhmm() { var d = new Date(); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+  // 서버에 올릴 형태: 필요한 칸만, 고객명은 가려서
+  function packFile(kind, name, rows) {
+    return {
+      kind: kind, name: name, partner: rows[0] ? Engine.normPartner(rows[0].협력점) : '', settleDate: topDate(rows), cols: FIELDS,
+      data: rows.map(function (r) { return FIELDS.map(function (f) { var v = r[f]; if (f === '고객명') v = mask(v); return v == null ? '' : v; }); })
+    };
+  }
+  function unpackFile(f) { return Engine.gridToRecords([f.cols].concat(f.data || [])); }
+
+  function refreshWorks() {
+    return Api.workList().then(function (l) { state.works = l; return l; }).catch(function (err) { authFail(err); state.works = state.works || []; return state.works; });
+  }
+  function ensureWork(rows) {
+    if (state.work) return Promise.resolve(state.work);
+    var d = topDate(rows);
+    if (!d) return Promise.reject(new Error('파일에 정산예정일이 없어서 회차를 정할 수 없어요.'));
+    return Api.workOpen(d).then(function (w) { state.work = w; remember(w.id); return w; });
+  }
+  function setSync(s) { state.sync = s; renderSide(); if (state.view === 'check' && !(state.res && state.showResult !== false)) renderUpload(); }
+  // kind: raw | stmt, items: [{name, rows}]
+  function syncFiles(kind, items) {
+    if (state.mode === 'demo' || !items.length) return;
+    setSync({ status: 'saving' });
+    var all = []; items.forEach(function (it) { all = all.concat(it.rows); });
+    ensureWork(all).then(function (w) {
+      var packs = items.map(function (it) { return packFile(kind, it.name, it.rows); });
+      var other = packs.filter(function (p) { return p.settleDate && p.settleDate !== w.settleDate; });
+      if (other.length) toast('다른 회차(' + esc(other[0].settleDate) + ') 파일이 섞였어요: ' + esc(other.map(function (p) { return p.name; }).slice(0, 3).join(', ')) + (other.length > 3 ? ' 외 ' + (other.length - 3) + '개' : '') + '. 지금 작업은 ' + esc(w.settleDate) + ' 회차예요.', 8000);
+      // 한 번에 너무 크지 않게 나눠서 올림
+      var batches = [], cur = [], size = 0;
+      packs.forEach(function (p) {
+        var s = JSON.stringify(p.data).length;
+        if (cur.length && size + s > 1500000) { batches.push(cur); cur = []; size = 0; }
+        cur.push(p); size += s;
+      });
+      if (cur.length) batches.push(cur);
+      return batches.reduce(function (pr, b, i) {
+        return pr.then(function () {
+          if (batches.length > 1) setSync({ status: 'saving', msg: (i + 1) + '/' + batches.length });
+          return Api.workPutFiles(w.id, b).then(function (r) { state.work = r.work; });
+        });
+      }, Promise.resolve());
+    }).then(function () {
+      setSync({ status: 'ok', at: hhmm() }); refreshWorks();
+    }).catch(function (err) {
+      if (authFail(err)) return;
+      setSync({ status: 'err', msg: err.message, retry: function () { syncFiles(kind, items); } });
+    });
+  }
+  function loadWork(id) {
+    busy(true, '작업을 불러오는 중...');
+    return Api.workGet(id).then(function (d) {
+      var raw = d.files.filter(function (f) { return f.kind === 'raw'; })[0];
+      state.mode = 'live'; state.res = null; state.savedRun = null; state.showResult = false;
+      state.work = d.work; remember(d.work.id);
+      state.raw = raw ? unpackFile(raw) : null; state.rawName = raw ? raw.name : ''; state.rawErr = '';
+      state.stmts = d.files.filter(function (f) { return f.kind === 'stmt'; }).map(function (f) { return { name: f.name, rows: unpackFile(f) }; });
+      state.sync = { status: 'loaded', at: d.work.updatedAt, by: d.work.updatedBy };
+      busy(false); state.view = 'check'; renderSide(); renderMain();
+    }).catch(function (err) { busy(false); remember(null); fail(err); });
+  }
+  function startNewWork() {
+    state.work = null; remember(null); state.raw = null; state.rawName = ''; state.rawErr = ''; state.stmts = []; state.sync = null;
+    state.res = null; state.mode = 'live'; state.showResult = false;
+    renderSide(); renderMain();
+  }
+
   function leaveSpecialMode() {
     if (state.mode === 'demo') { state.raw = null; state.rawName = ''; state.stmts = []; }
     if (state.mode !== 'live') { state.res = null; state.mode = 'live'; state.savedRun = null; }
@@ -181,9 +268,14 @@
     var f = files[0];
     busy(true, f.name + ' 읽는 중... (큰 파일은 몇 초 걸려요)');
     setTimeout(function () {
-      readFile(f).then(function (rows) { state.raw = rows; state.rawName = f.name; state.rawErr = ''; })
-        .catch(function (err) { state.raw = null; state.rawName = f.name; state.rawErr = err.message; })
-        .then(function () { busy(false); state.showResult = false; renderSide(); renderMain(); });
+      readFile(f).then(function (rows) {
+        state.raw = rows; state.rawName = f.name; state.rawErr = '';
+        busy(false); state.showResult = false; renderSide(); renderMain();
+        syncFiles('raw', [{ name: f.name, rows: rows }]);
+      }).catch(function (err) {
+        state.raw = null; state.rawName = f.name; state.rawErr = err.message;
+        busy(false); state.showResult = false; renderSide(); renderMain();
+      });
     }, 30);
   }
   function onStFiles(files) {
@@ -199,6 +291,7 @@
           state.stmts.push(item);
         });
         busy(false); state.showResult = false; renderSide(); renderMain();
+        syncFiles('stmt', list.filter(function (x) { return !x.error && x.rows.length; }));
       });
     }, 30);
   }
@@ -209,8 +302,40 @@
     ['dragleave', 'drop'].forEach(function (ev) { el.addEventListener(ev, function (e) { e.preventDefault(); el.classList.remove('over'); }); });
     el.addEventListener('drop', function (e) { fn([].slice.call(e.dataTransfer.files)); });
   }
+  // 두 번 눌러야 실행되는 버튼 (확인 창 대신)
+  function armed(btn, label, fn) {
+    btn.addEventListener('click', function () {
+      if (!btn.classList.contains('armed')) {
+        var orig = btn.innerHTML; btn.classList.add('armed'); btn.textContent = label;
+        setTimeout(function () { if (btn.isConnected) { btn.classList.remove('armed'); btn.innerHTML = orig; } }, 4000);
+        return;
+      }
+      fn();
+    });
+  }
 
   /* ═════════════ 파일 올리기 화면 ═════════════ */
+  function syncLine() {
+    var s = state.sync, w = state.work;
+    if (state.mode === 'demo') return '';
+    if (!w && !(s && s.status === 'saving')) return '<span class="sync">' + ic('save', 13) + '파일을 올리면 회차별로 서버에 자동 저장돼요</span>';
+    var head = w ? '<span class="segb" style="margin:0">' + esc(w.settleDate) + ' 회차</span>' : '';
+    if (!s) return head;
+    if (s.status === 'saving') return head + '<span class="sync"><span class="spin sm"></span>서버에 저장 중' + (s.msg ? ' (' + esc(s.msg) + ')' : '') + '...</span>';
+    if (s.status === 'ok') return head + '<span class="sync ok">' + ic('check', 13) + '자동 저장됨 ' + esc(s.at) + '</span>';
+    if (s.status === 'loaded') return head + '<span class="sync ok">' + ic('check', 13) + '이어서 하는 중 · 마지막 저장 ' + esc(s.at) + ' ' + esc(s.by || '') + '</span>';
+    return head + '<span class="sync err">' + ic('alert', 13) + '서버 저장 실패: ' + esc(s.msg) + ' <button class="linkb" id="bRetry">다시 저장</button></span>';
+  }
+  function worksPanel() {
+    var list = (state.works || []).filter(function (w) { return !state.work || w.id !== state.work.id; });
+    if (!list.length) return '';
+    return '<div class="card works"><div class="card-h"><h2><span class="ib c4">' + ic('cal') + '</span>' + (state.work ? '다른 작업 중인 회차' : '이어서 할 회차') + '</h2></div>' +
+      '<div class="wlist">' + list.map(function (w) {
+        return '<button class="witem" data-work="' + esc(w.id) + '"><b>' + esc(w.settleDate) + ' 회차</b>' +
+          '<span class="wmeta">로우 ' + (w.raw ? won(w.raw.rows) + '건' : '<em>없음</em>') + ' · 정산서 ' + won(w.stmtFiles) + '개(' + won(w.stmtRows) + '건)' + (w.runs ? ' · 결과 저장 ' + w.runs + '번' : '') + '</span>' +
+          '<span class="wby">' + esc(w.updatedAt) + ' · ' + esc(w.updatedBy) + '</span><span class="wgo">이어서 하기 ›</span></button>';
+      }).join('') + '</div></div>';
+  }
   function renderUpload() {
     var hasRaw = !!state.raw, sts = okStmts(), errs = state.stmts.filter(function (s) { return s.error; });
     var stRows = sts.reduce(function (a, s) { return a + s.rows.length; }, 0);
@@ -218,18 +343,24 @@
       : hasRaw ? esc(state.rawName) + ' · ' + won(state.raw.length) + '건 · 정산예정일 ' + esc(summarizeDates(state.raw))
       : '전체정산관리 엑셀 1개 (정산예정일로 받은 파일). 끌어다 놓아도 돼요';
     var stSmall = sts.length ? won(sts.length) + '개 파일 · ' + won(stRows) + '건' + (errs.length ? ' · 읽지 못한 파일 ' + errs.length + '개' : '')
-      : '같은 회차 협력점별 정산내역서 여러 개를 한 번에. 더 넣으면 이어서 쌓여요';
+      : '같은 회차 협력점별 정산내역서 여러 개를 한 번에. 나눠서 올려도 계속 쌓여요';
     var chips = state.stmts.length ? '<div class="fchips">' +
-      errs.map(function (s) { return '<span class="fchip err" title="' + esc(s.error) + '">' + esc(s.name) + '</span>'; }).join('') +
-      sts.map(function (s) { var p = s.rows[0] ? Engine.normPartner(s.rows[0].협력점) : '빈 파일'; return '<span class="fchip" title="' + esc(s.name) + '">' + esc(p) + ' ' + s.rows.length + '</span>'; }).join('') + '</div>' : '';
+      errs.map(function (s) { return '<span class="fchip err" title="' + esc(s.error) + '">' + esc(s.name) + '<button class="fx" data-rm="' + esc(s.name) + '" title="빼기">×</button></span>'; }).join('') +
+      sts.map(function (s) { var p = s.rows[0] ? Engine.normPartner(s.rows[0].협력점) : '빈 파일'; return '<span class="fchip" title="' + esc(s.name) + '">' + esc(p) + ' ' + s.rows.length + '<button class="fx" data-rm="' + esc(s.name) + '" title="이 파일 빼기">×</button></span>'; }).join('') + '</div>' : '';
     var ready = hasRaw && sts.length;
+    var hasFiles = state.raw || state.stmts.length;
     $('main').innerHTML =
       '<div class="top"><div><h1>사은품 차감 검수</h1><p class="sub">정산 당시 정산내역서와 현재 로우데이터를 건별로 대조해, 정산 후 지급됐는데 차감되지 않은 사은품을 찾아요.</p></div>' +
-      '<div class="top-r">' + (state.res ? '<button class="ghost" id="bBack">' + ic('sheet') + '결과로 돌아가기</button>' : '') + '</div></div>' +
+      '<div class="top-r">' +
+        (state.res ? '<button class="ghost" id="bBack">' + ic('sheet') + '결과로 돌아가기</button>' : '') +
+        (state.work ? '<button class="ghost" id="bNewWork">' + ic('rotate') + '새 회차 시작</button><button class="ghost del" id="bCloseWork">' + ic('check') + '이 회차 작업 끝내기</button>' : '') +
+      '</div></div>' +
+      worksPanel() +
       '<div class="card upl">' +
         '<div class="steps"><i class="' + (hasRaw ? 'done' : 'on') + '"></i><i class="' + (sts.length ? 'done' : hasRaw ? 'on' : '') + '"></i><i class="' + (ready ? 'on' : '') + '"></i></div>' +
         '<h2>검수할 파일을 올려주세요</h2>' +
-        '<p class="sub">엑셀 파일은 이 브라우저 안에서만 읽어요. 서버에는 검수 결과만 저장돼요.</p>' +
+        '<p class="sub">올린 파일은 회차별로 서버에 자동 저장돼서, 나중에 들어와도 이어서 할 수 있어요. 고객명은 가려서 저장해요.</p>' +
+        '<div class="syncrow" id="syncRow">' + syncLine() + '</div>' +
         '<ol class="stepl">' +
           '<li id="liRaw" class="' + (hasRaw ? 'done' : '') + (state.rawErr ? ' err' : '') + '"><span>' + (hasRaw ? ic('check', 13) : '1') + '</span><div><b>현재 로우데이터</b><small>' + rawSmall + '</small></div>' +
             '<button class="' + (hasRaw ? 'ghost' : 'primary') + '" id="bRaw">' + ic('upload') + (hasRaw ? '바꾸기' : '올리기') + '</button></li>' +
@@ -237,7 +368,7 @@
             '<button class="' + (sts.length || !hasRaw ? 'ghost' : 'primary') + '" id="bSt">' + ic('upload') + (sts.length ? '더 넣기' : '올리기') + '</button></li>' +
         '</ol>' +
         '<div class="runrow"><span>' +
-          (state.raw || state.stmts.length ? '<button class="linkb" id="bClear">파일 비우기</button> · ' : '') +
+          (hasFiles ? '<button class="linkb" id="bClear">파일 모두 빼기</button> · ' : '') +
           '<button class="linkb" id="bDemo">예시 데이터로 둘러보기</button></span>' +
           '<button class="primary" id="bRun"' + (ready ? '' : ' disabled') + '>' + ic('play', 14) + '검수 실행</button></div>' +
       '</div>' +
@@ -252,9 +383,33 @@
     $('bSt').addEventListener('click', function () { $('fSt').click(); });
     bindDrop($('liRaw'), onRawFiles); bindDrop($('liSt'), onStFiles);
     $('bRun').addEventListener('click', runCheck);
-    $('bDemo').addEventListener('click', loadDemo);
-    if ($('bClear')) $('bClear').addEventListener('click', function () { state.raw = null; state.rawName = ''; state.rawErr = ''; state.stmts = []; renderSide(); renderUpload(); });
+    $('bDemo').addEventListener('click', function () { state.work = null; state.sync = null; loadDemo(); });
     if ($('bBack')) $('bBack').addEventListener('click', function () { state.showResult = true; renderMain(); });
+    if ($('bRetry')) $('bRetry').addEventListener('click', function () { state.sync.retry(); });
+    [].forEach.call($('main').querySelectorAll('[data-work]'), function (b) { b.addEventListener('click', function () { loadWork(b.dataset.work); }); });
+    [].forEach.call($('main').querySelectorAll('[data-rm]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var name = b.dataset.rm;
+        state.stmts = state.stmts.filter(function (s) { return s.name !== name; });
+        renderSide(); renderUpload();
+        if (state.work) Api.workRemoveFiles(state.work.id, 'stmt', [name]).then(function (r) { state.work = r.work; setSync({ status: 'ok', at: hhmm() }); refreshWorks(); }).catch(fail);
+      });
+    });
+    if ($('bClear')) armed($('bClear'), '정말 모두 뺄까요? 한 번 더 누르세요', function () {
+      var w = state.work;
+      state.raw = null; state.rawName = ''; state.rawErr = ''; state.stmts = [];
+      renderSide(); renderUpload();
+      if (w) Api.workRemoveFiles(w.id, null, null).then(function (r) { state.work = r.work; setSync({ status: 'ok', at: hhmm() }); refreshWorks(); }).catch(fail);
+    });
+    if ($('bNewWork')) $('bNewWork').addEventListener('click', function () { startNewWork(); refreshWorks().then(function () { renderUpload(); }); });
+    if ($('bCloseWork')) armed($('bCloseWork'), '목록에서 내릴까요? 한 번 더', function () {
+      var w = state.work;
+      Api.workClose(w.id).then(function () {
+        toast(esc(w.settleDate) + ' 회차 작업을 끝냈어요. 올린 파일은 이어하기 목록에서 내려가요. 저장한 검수 결과는 [검수 기록]에 그대로 있어요.', 6000);
+        startNewWork(); return refreshWorks();
+      }).then(function () { renderUpload(); }).catch(fail);
+    });
   }
   function ruleCard(c, icon, t, p) { return '<div class="rule"><div class="kt"><span class="ib ' + c + '">' + ic(icon) + '</span>' + t + '</div><p>' + p + '</p></div>'; }
   function summarizeDates(rows) {

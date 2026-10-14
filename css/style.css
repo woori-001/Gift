@@ -389,3 +389,26 @@ table.t.sm{font-size:13px}.t.sm th,.t.sm td{padding:7px 8px}
   .upl .stepl li>button{margin-left:36px}
   .frow .field input{width:100%}
 }
+
+/* ───── 작업 이어하기 ───── */
+.works{max-width:760px;margin:20px auto 0;padding:18px 20px}
+.works .card-h{margin-bottom:10px}
+.wlist{display:flex;flex-direction:column;gap:8px}
+.witem{display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:"t m go" "t b go";column-gap:14px;align-items:center;text-align:left;border:1px solid var(--line);background:var(--soft);border-radius:14px;padding:12px 14px;cursor:pointer;transition:border-color .15s,background .15s}
+.witem:hover{border-color:var(--pri);background:var(--pri-w)}
+.witem b{grid-area:t;font-size:15px;white-space:nowrap}
+.witem .wmeta{grid-area:m;font-size:13px;color:#4a5263}
+.witem .wmeta em{font-style:normal;color:var(--up)}
+.witem .wby{grid-area:b;font-size:12px;color:var(--dim)}
+.witem .wgo{grid-area:go;font-weight:700;color:var(--pri-d);font-size:13px;white-space:nowrap}
+.upl .syncrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;min-height:24px}
+.sync{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--sub);font-weight:500}
+.sync.ok{color:var(--green)}
+.sync.err{color:var(--up)}
+.spin.sm{width:13px;height:13px;border-width:2px}
+.fchip{display:inline-flex;align-items:center;gap:4px}
+.fx{border:0;background:none;color:var(--dim);cursor:pointer;padding:0 0 0 2px;font-size:13px;line-height:1}
+.fx:hover{color:var(--up)}
+.ghost.armed{background:var(--up);border-color:var(--up);color:#fff}
+.linkb.armed{color:var(--up)}
+@media (max-width:760px){.witem{grid-template-columns:1fr;grid-template-areas:"t" "m" "b" "go";row-gap:2px}}

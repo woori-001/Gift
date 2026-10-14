@@ -58,6 +58,13 @@ var Api = (function () {
     runList: function (limit) { return withToken('gift_run_list', { p_limit: limit || 100 }); },
     runGet: function (id) { return withToken('gift_run_get', { p_id: id }); },
     runMemo: function (id, memo) { return withToken('gift_run_memo', { p_id: id, p_memo: memo }); },
-    runHide: function (id) { return withToken('gift_run_hide', { p_id: id }); }
+    runHide: function (id) { return withToken('gift_run_hide', { p_id: id }); },
+    // 작업 중인 회차(이어하기)
+    workList: function () { return withToken('gift_work_list', {}); },
+    workOpen: function (settleDate) { return withToken('gift_work_open', { p_settle_date: settleDate }); },
+    workGet: function (id) { return withToken('gift_work_get', { p_work_id: id }); },
+    workPutFiles: function (id, files) { return withToken('gift_work_put_files', { p_work_id: id, p_files: files }); },
+    workRemoveFiles: function (id, kind, names) { return withToken('gift_work_remove_files', { p_work_id: id, p_kind: kind || null, p_names: names || null }); },
+    workClose: function (id) { return withToken('gift_work_close', { p_work_id: id }); }
   };
 })();

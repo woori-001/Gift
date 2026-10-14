@@ -1,0 +1,20 @@
+# 고객 정보가 들어 있는 엑셀·정산서는 절대 커밋하지 않기
+*.xls
+*.xlsx
+*.xlsm
+*.csv
+*.htm
+data/
+uploads/
+
+# 비밀 키·환경 파일
+.env
+.env.*
+supabase/.temp/
+supabase/.branches/
+
+# 기타
+node_modules/
+.DS_Store
+Thumbs.db
+*.log
