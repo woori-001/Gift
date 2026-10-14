@@ -223,7 +223,7 @@
       var batches = [], cur = [], size = 0;
       packs.forEach(function (p) {
         var s = JSON.stringify(p.data).length;
-        if (cur.length && size + s > 1500000) { batches.push(cur); cur = []; size = 0; }
+        if (cur.length && (size + s > 1200000 || cur.length >= 40)) { batches.push(cur); cur = []; size = 0; }
         cur.push(p); size += s;
       });
       if (cur.length) batches.push(cur);
@@ -238,6 +238,7 @@
     }).catch(function (err) {
       if (authFail(err)) return;
       setSync({ status: 'err', msg: err.message, retry: function () { syncFiles(kind, items); } });
+      toast('서버에 저장하지 못했어요: ' + esc(err.message) + '<br>지금 화면에서는 그대로 검수할 수 있지만, 다시 접속하면 이 파일은 빠져 있어요. [다시 저장]을 눌러주세요.', 10000);
     });
   }
   function loadWork(id) {
