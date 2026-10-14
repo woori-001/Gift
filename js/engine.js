@@ -28,7 +28,12 @@ var Engine = (function () {
   function normPartner(p) {
     return s(p).replace(/\(휴\)/g, '').replace(/[★☆■□◆◇●○◎▲△▼▽◀▶♠♣♥♡\s]/g, '');
   }
-  function normSvc(v) { return s(v).replace(/\s+/g, ''); }
+  // 가입서비스: '(★상품권,문자)z!652.../02-...' 처럼 앞뒤에 붙는 괄호 메모·기호·공백은 떼고 비교
+  function normSvc(v) {
+    return s(v).replace(/[\(\[\{【<][^\)\]\}】>]*[\)\]\}】>]/g, '').replace(/[★☆\s]/g, '').toUpperCase();
+  }
+  // '/'·','로 나뉜 번호 조각 (z!65252735872 / 02-040-2907)
+  function svcTokens(v) { return normSvc(v).split(/[\/,|]/).filter(function (x) { return x.length >= 6; }); }
   function nameMatch(a, b) {
     a = s(a).replace(/\s+/g, ''); b = s(b).replace(/\s+/g, '');
     if (a === b) return true;
@@ -37,6 +42,20 @@ var Engine = (function () {
       if (a[i] !== b[i] && a[i] !== '*' && b[i] !== '*') return false;
     }
     return true;
+  }
+
+  // 느슨한 이름 비교: 괄호·'/메모'를 떼고, '*' 하나가 여러 글자를 대신해도 같은 사람으로 봄
+  function cleanName(n) { return s(n).replace(/\([^)]*\)/g, '').replace(/\/.*$/, '').replace(/[\s.]/g, ''); }
+  function nameLoose(a, b) {
+    a = cleanName(a); b = cleanName(b);
+    if (!a || !b) return false;
+    if (nameMatch(a, b)) return true;
+    var am = a.indexOf('*') >= 0, bm = b.indexOf('*') >= 0;
+    if (am && bm) return a[0] === b[0] && a[a.length - 1] === b[b.length - 1];
+    if (!am && !bm) return false;
+    var pat = am ? a : b, plain = am ? b : a;
+    var re = new RegExp('^' + pat.split(/\*+/).map(function (x) { return x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('.+') + '$');
+    return re.test(plain);
   }
 
   /* ---- HTML 표(.xls로 저장된 어드민 엑셀) → 2차원 배열 (rowspan/colspan 반영) ---- */
@@ -124,14 +143,15 @@ var Engine = (function () {
     return n * 1e12 + Math.abs(a.정산금액 - b.정산금액);
   }
 
-  function matchPass(stmtRows, rawRows, keyFn, allowPartnerFallback, tag) {
+  function matchPass(stmtRows, rawRows, keyFn, allowPartnerFallback, tag, nameFn) {
+    nameFn = nameFn || nameMatch;
     var idx = {};
     rawRows.forEach(function (r) { if (r._used) return; var k = keyFn(r); (idx[k] = idx[k] || []).push(r); });
     var pairs = [];
     stmtRows.forEach(function (st) {
       if (st._used) return;
       var cands = (idx[keyFn(st)] || []).filter(function (r) { return !r._used; });
-      var byName = cands.filter(function (r) { return nameMatch(r.고객명, st.고객명); });
+      var byName = cands.filter(function (r) { return nameFn(r.고객명, st.고객명); });
       var note = tag;
       if (!byName.length && allowPartnerFallback) {
         byName = cands.filter(function (r) { return r._partner === st._partner; });
@@ -141,6 +161,32 @@ var Engine = (function () {
       byName.sort(function (a, b) { return diffScore(a, st) - diffScore(b, st); });
       var r = byName[0]; r._used = st._used = true;
       pairs.push({ raw: r, st: st, note: note || '' });
+    });
+    return pairs;
+  }
+
+  // 마지막 단계: 가입서비스 번호 조각이 하나라도 같고, 정산구분·상품명이 같으며, 이름(느슨하게)이나 협력점이 같으면 같은 건
+  function tokenPass(stmtRows, rawRows) {
+    var idx = {};
+    rawRows.forEach(function (r) {
+      if (r._used) return;
+      svcTokens(r.가입서비스).forEach(function (tk) { var k = r.정산종류 + '|' + r.상품명 + '|' + tk; (idx[k] = idx[k] || []).push(r); });
+    });
+    var pairs = [];
+    stmtRows.forEach(function (st) {
+      if (st._used) return;
+      var seen = [], cands = [];
+      svcTokens(st.가입서비스).forEach(function (tk) {
+        (idx[st.정산종류 + '|' + st.상품명 + '|' + tk] || []).forEach(function (r) { if (!r._used && seen.indexOf(r) < 0) { seen.push(r); cands.push(r); } });
+      });
+      cands = cands.filter(function (r) { return nameLoose(r.고객명, st.고객명) || r._partner === st._partner; });
+      if (!cands.length) return;
+      cands.sort(function (a, b) {
+        var sa = (a.상품옵션 === st.상품옵션 ? 0 : 1) + (a.개통일 === st.개통일 ? 0 : 1), sb = (b.상품옵션 === st.상품옵션 ? 0 : 1) + (b.개통일 === st.개통일 ? 0 : 1);
+        return sa - sb || diffScore(a, st) - diffScore(b, st);
+      });
+      var r = cands[0]; r._used = st._used = true;
+      pairs.push({ raw: r, st: st, note: '가입서비스 표기 다름' });
     });
     return pairs;
   }
@@ -156,7 +202,8 @@ var Engine = (function () {
     rawRows.forEach(function (r) { r._used = false; });
     stmtRows.forEach(function (r) { r._used = false; });
     var pairs = matchPass(stmtRows, rawRows, keyOf, true, '')
-      .concat(matchPass(stmtRows, rawRows, key2Of, false, '개통일·상품옵션 변경'));
+      .concat(matchPass(stmtRows, rawRows, key2Of, false, '개통일·상품옵션 변경', nameLoose))
+      .concat(tokenPass(stmtRows, rawRows));
 
     var undeducted = [], changed = [];
     pairs.forEach(function (p) {
@@ -186,7 +233,14 @@ var Engine = (function () {
       else if (p.note && !gap) changed.push({ raw: r, st: st, diffs: [], note: p.note, delta: r.정산금액 - st.정산금액 });
     });
 
-    var missing = rawRows.filter(function (r) { return !r._used; }).map(function (r) {
+    // 누락은 올린 정산서의 정산예정일(회차)에 해당하는 로우만 판단. 다른 회차 로우는 따로 셈
+    var stDates = {}; stmtRows.forEach(function (r) { if (r.정산예정일) stDates[r.정산예정일] = 1; });
+    var hasDates = Object.keys(stDates).length > 0, otherRound = { count: 0, dates: {} };
+    var missing = rawRows.filter(function (r) {
+      if (r._used) return false;
+      if (hasDates && r.정산예정일 && !stDates[r.정산예정일]) { otherRound.count++; otherRound.dates[r.정산예정일] = (otherRound.dates[r.정산예정일] || 0) + 1; return false; }
+      return true;
+    }).map(function (r) {
       return { raw: r, paid: paidByUs(r) };
     });
     var stmtOnly = stmtRows.filter(function (r) { return !r._used; }).map(function (st) { return { st: st }; });
@@ -219,9 +273,9 @@ var Engine = (function () {
     var partners = Object.keys(parts).map(function (k) { return parts[k]; })
       .sort(function (a, b) { return b.undAmt - a.undAmt || b.miss - a.miss || a.name.localeCompare(b.name); });
 
-    return { excluded: excluded, rawCount: rawRows.length, stmtCount: stmtRows.length, pairs: pairs, undeducted: undeducted, missing: missing, stmtOnly: stmtOnly, changed: changed, checks: checks, partners: partners };
+    return { otherRound: otherRound, roundDates: Object.keys(stDates).sort(), excluded: excluded, rawCount: rawRows.length, stmtCount: stmtRows.length, pairs: pairs, undeducted: undeducted, missing: missing, stmtOnly: stmtOnly, changed: changed, checks: checks, partners: partners };
   }
 
-  return { htmlToGrid: htmlToGrid, gridToRecords: gridToRecords, run: run, paidByUs: paidByUs, normPartner: normPartner, isOwnBranch: isOwnBranch, nameMatch: nameMatch, DED: DED };
+  return { htmlToGrid: htmlToGrid, gridToRecords: gridToRecords, run: run, paidByUs: paidByUs, normPartner: normPartner, isOwnBranch: isOwnBranch, nameMatch: nameMatch, nameLoose: nameLoose, normSvc: normSvc, DED: DED };
 })();
 if (typeof module !== 'undefined') module.exports = Engine;

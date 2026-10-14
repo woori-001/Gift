@@ -354,7 +354,7 @@
       '<div class="top"><div><h1>사은품 차감 검수</h1><p class="sub">정산 당시 정산내역서와 현재 로우데이터를 건별로 대조해, 정산 후 지급됐는데 차감되지 않은 사은품을 찾아요.</p></div>' +
       '<div class="top-r">' +
         (state.res ? '<button class="ghost" id="bBack">' + ic('sheet') + '결과로 돌아가기</button>' : '') +
-        (state.work ? '<button class="ghost" id="bNewWork">' + ic('rotate') + '새 회차 시작</button><button class="ghost del" id="bCloseWork">' + ic('check') + '이 회차 작업 끝내기</button>' : '') +
+        (state.work ? '<button class="ghost" id="bNewWork">' + ic('rotate') + '새 회차 시작</button><button class="ghost del" id="bCloseWork">' + ic('check') + '검수 끝 · 초기화</button>' : '') +
       '</div></div>' +
       worksPanel() +
       '<div class="card upl">' +
@@ -398,10 +398,10 @@
       if (w) Api.workRemoveFiles(w.id, null, null).then(function (r) { state.work = r.work; setSync({ status: 'ok', at: hhmm() }); refreshWorks(); }).catch(fail);
     });
     if ($('bNewWork')) $('bNewWork').addEventListener('click', function () { startNewWork(); refreshWorks().then(function () { renderUpload(); }); });
-    if ($('bCloseWork')) armed($('bCloseWork'), '목록에서 내릴까요? 한 번 더', function () {
+    if ($('bCloseWork')) armed($('bCloseWork'), '올린 파일을 비울까요? 한 번 더', function () {
       var w = state.work;
       Api.workClose(w.id).then(function () {
-        toast(esc(w.settleDate) + ' 회차 작업을 끝냈어요. 올린 파일은 이어하기 목록에서 내려가요. 저장한 검수 결과는 [검수 기록]에 그대로 있어요.', 6000);
+        toast(esc(w.settleDate) + ' 회차를 초기화했어요. 서버에 올려둔 로우·정산서 내용을 비웠어요. 저장한 검수 결과는 [검수 기록]에 그대로 있어요.', 7000);
         startNewWork(); return refreshWorks();
       }).then(function () { renderUpload(); }).catch(fail);
     });
@@ -422,7 +422,7 @@
       var res = Engine.run(raw, stRows);
       var dates = {}; raw.forEach(function (r) { if (r.정산예정일) dates[r.정산예정일] = (dates[r.정산예정일] || 0) + 1; });
       res.meta = {
-        settleDate: Object.keys(dates).sort(function (a, b) { return dates[b] - dates[a]; })[0] || '',
+        settleDate: topDate(stRows) || Object.keys(dates).sort(function (a, b) { return dates[b] - dates[a]; })[0] || '',
         rawFile: state.rawName, stmtFiles: okStmts().length, rawRows: res.rawCount, stmtRows: res.stmtCount, matched: res.pairs.length,
         excluded: res.excluded
       };
@@ -437,8 +437,14 @@
     var out = [], rd = {}, sd = {};
     raw.forEach(function (r) { rd[r.정산예정일] = 1; }); st.forEach(function (r) { sd[r.정산예정일] = 1; });
     var rk = Object.keys(rd), extra = Object.keys(sd).filter(function (d) { return !rd[d]; });
-    if (rk.length > 1) out.push(['warn', '로우데이터에 정산예정일이 ' + rk.length + '개 섞여 있어요 (' + esc(rk.join(', ')) + '). 한 회차씩 검수하는 게 정확해요.']);
-    if (extra.length) out.push(['warn', '정산내역서에 로우데이터와 다른 정산예정일이 있어요 (' + esc(extra.join(', ')) + '). 다른 회차 파일이 섞였는지 확인하세요.']);
+    var o = res.otherRound;
+    if (o && o.count) {
+      var od = Object.keys(o.dates).sort();
+      out.push(['info', '로우데이터에 다른 회차 건이 섞여 있어요. 누락은 올린 정산서 회차(<b>' + esc(res.roundDates.join(', ')) + '</b>)에 해당하는 건만 봤고, 다른 회차 <b>' + won(o.count) + '건</b>은 뺐어요.' +
+        '<span class="rnames">' + od.map(function (d) { return esc(d) + ' ' + won(o.dates[d]) + '건'; }).join(', ') + '</span>']);
+    }
+    if (Object.keys(sd).length > 1) out.push(['warn', '정산내역서에 정산예정일이 ' + Object.keys(sd).length + '개 섞여 있어요 (' + esc(Object.keys(sd).sort().join(', ')) + '). 다른 회차 파일이 섞였는지 확인하세요.']);
+    if (extra.length) out.push(['warn', '정산내역서 회차(' + esc(extra.join(', ')) + ')가 로우데이터에 없어요. 로우데이터를 그 회차가 들어가게 받았는지 확인하세요.']);
     return out;
   }
   function noStNote() {

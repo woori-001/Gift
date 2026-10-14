@@ -72,3 +72,27 @@ test('자점(번호.이름 협력점)은 검수 대상에서 뺀다', () => {
   assert.ok(!res.partners.some(p => /^\d+\./.test(p.key)));
   assert.strictEqual(Engine.isOwnBranch('★(휴)가상○'), false);
 });
+
+test('가입서비스 앞뒤 괄호 메모·공백이 달라도 같은 건으로 매칭', () => {
+  const st = toRecords([row({ 고객명: '김정아', 가입서비스: '(★상품권,문자)z!65252735872/02-040-2907', 상품명: 'KT_인터넷', 협력점: '★다은정보●', 약정금액: 277273, 차감내역_사은품: 310000, 사은품지급처: '웨이브넷 지급', 현금: 310000 })]);
+  const raw = toRecords([row({ 고객명: '김*아', 가입서비스: 'z!65252735872 / 02-040-2907', 상품명: 'KT_인터넷', 협력점: '★다은정보●', 약정금액: 277273, 차감내역_사은품: 310000, 사은품지급처: '웨이브넷 지급', 현금: 310000 })]);
+  const res = Engine.run(raw, st);
+  assert.strictEqual(res.pairs.length, 1);
+  assert.strictEqual(res.missing.length, 0);
+});
+
+test('가입서비스 번호 조각 하나만 같아도(표기 다름) 이름·상품이 맞으면 매칭', () => {
+  const st = toRecords([row({ 고객명: '박민식', 가입서비스: 'z!11112222333', 상품명: 'KT_TV', 개통일: '2026-01-07' })]);
+  const raw = toRecords([row({ 고객명: '박*식/인완', 가입서비스: 'z!11112222333/02-111-2222', 상품명: 'KT_TV', 개통일: '2026-01-08' })]);
+  const res = Engine.run(raw, st);
+  assert.strictEqual(res.pairs.length, 1);
+  assert.strictEqual(res.pairs[0].note, '가입서비스 표기 다름');
+});
+
+test('정산서 회차와 다른 정산예정일의 로우는 누락으로 잡지 않음', () => {
+  const st = toRecords([row({ 고객명: '가나다', 가입서비스: 'z!1', 정산예정일: '2026-09-18' })]);
+  const raw = toRecords([row({ 고객명: '가*다', 가입서비스: 'z!1', 정산예정일: '2026-09-18' }), row({ 고객명: '라*바', 가입서비스: 'z!2', 정산예정일: '2026-09-04' })]);
+  const res = Engine.run(raw, st);
+  assert.strictEqual(res.missing.length, 0);
+  assert.strictEqual(res.otherRound.count, 1);
+});
