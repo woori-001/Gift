@@ -263,8 +263,22 @@ var Engine = (function () {
     rawRows.forEach(function (r) {
       if (/유치자/.test(r.사은품지급처) && r.차감내역_사은품 > 0) payerErr(r, '현재 로우 유치자지급인데 사은품 차감 ' + r.차감내역_사은품.toLocaleString() + '원');
     });
+    // 현금사은품 금액이 있고 지급예정일이 잡혔으면 본사가 지급하는 건 → 지급처가 유치자지급이거나 사은품 차감이 모자라면 오류
+    function cashIssues(r) {
+      var out = [], w = function (n) { return n.toLocaleString() + '원'; };
+      if (r.정산종류 !== '일반' || !(r.현금 > 0)) return out;
+      var scheduled = !!r.지급예정, ours = /웨이브넷/.test(r.사은품지급처);
+      if (scheduled && /유치자/.test(r.사은품지급처)) out.push('현금사은품 ' + w(r.현금) + '·지급예정일 ' + r.지급예정 + ' 있는데 지급처가 유치자지급');
+      if ((scheduled || ours) && r.차감내역_사은품 < r.현금) out.push('현금사은품 ' + w(r.현금) + (scheduled ? ' 지급예정' : ' 웨이브넷 지급') + '인데 사은품 차감 ' + w(r.차감내역_사은품));
+      return out;
+    }
+    var undRaw = new Set(undeducted.map(function (u) { return u.raw; }));
+    pairs.forEach(function (p) {
+      if (undRaw.has(p.raw)) return; // 이미 ① 미차감으로 잡힌 건은 중복 표시 안 함
+      cashIssues(p.st).forEach(function (m) { payerErr(p.raw, '정산 당시 ' + m); });
+    });
     rawRows.forEach(function (r) {
-      if (r.정산종류 === '일반' && paidByUs(r) > r.차감내역_사은품) checks.push({ raw: r, why: '웨이브넷 지급 ' + paidByUs(r).toLocaleString() + '원인데 현재 로우 사은품 차감 ' + r.차감내역_사은품.toLocaleString() + '원' });
+      cashIssues(r).forEach(function (m) { payerErr(r, '현재 로우 ' + m); });
     });
 
     // 협력점 요약
