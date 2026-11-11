@@ -253,8 +253,17 @@ var Engine = (function () {
 
     // 확인 필요: 현재 로우 자체 이상
     var checks = [];
+    // 유치자지급(하부점이 고객에게 직접 지급)인데 정산의 사은품 차감에 금액이 들어가 차감된 건 → 하부점 정산금이 잘못 깎임
+    // (사은품 '현금' 칸에 금액만 적힌 건 오류 아님)
+    var byRaw = new Map();
+    function payerErr(r, msg) { var c = byRaw.get(r); if (c) { c.why += ' / ' + msg; } else { c = { raw: r, why: msg }; byRaw.set(r, c); checks.push(c); } }
+    pairs.forEach(function (p) {
+      if (/유치자/.test(p.st.사은품지급처) && p.st.차감내역_사은품 > 0) payerErr(p.raw, '정산 당시 유치자지급인데 사은품 ' + p.st.차감내역_사은품.toLocaleString() + '원 차감됨');
+    });
     rawRows.forEach(function (r) {
-      if (/유치자/.test(r.사은품지급처) && r.현금 > 0) checks.push({ raw: r, why: '지급처는 유치자지급인데 금액 ' + r.현금.toLocaleString() + '원 입력' });
+      if (/유치자/.test(r.사은품지급처) && r.차감내역_사은품 > 0) payerErr(r, '현재 로우 유치자지급인데 사은품 차감 ' + r.차감내역_사은품.toLocaleString() + '원');
+    });
+    rawRows.forEach(function (r) {
       if (r.정산종류 === '일반' && paidByUs(r) > r.차감내역_사은품) checks.push({ raw: r, why: '웨이브넷 지급 ' + paidByUs(r).toLocaleString() + '원인데 현재 로우 사은품 차감 ' + r.차감내역_사은품.toLocaleString() + '원' });
     });
 

@@ -118,3 +118,16 @@ test('가입서비스가 비어 있으면 이름이 다른 고객끼리 협력�
   const res = Engine.run(raw, st);
   assert.strictEqual(res.pairs.length, 0);
 });
+
+test('유치자지급인데 사은품이 차감되면 확인 필요, 현금 칸 입력만은 오류 아님', () => {
+  const st = toRecords([
+    row({ 고객명: '가나다', 가입서비스: 'z!1', 사은품지급처: '유치자지급', 현금: 440000 }),
+    row({ 고객명: '라마바', 가입서비스: 'z!2', 사은품지급처: '유치자지급', 현금: 300000, 차감내역_사은품: 300000 })]);
+  const raw = toRecords([
+    row({ 고객명: '가*다', 가입서비스: 'z!1', 사은품지급처: '유치자지급', 현금: 440000 }),
+    row({ 고객명: '라*바', 가입서비스: 'z!2', 사은품지급처: '유치자지급', 현금: 300000, 차감내역_사은품: 300000 })]);
+  const res = Engine.run(raw, st);
+  assert.strictEqual(res.checks.length, 1, '현금 칸만 있는 건은 제외, 차감된 건은 한 줄로');
+  assert.match(res.checks[0].why, /정산 당시 유치자지급인데 사은품 300,000원 차감됨/);
+  assert.match(res.checks[0].why, /현재 로우/);
+});
