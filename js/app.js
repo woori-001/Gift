@@ -1060,5 +1060,23 @@
     try { history.replaceState(null, '', location.pathname); } catch (e) {}
   }
 
+  /* 오른쪽 바: workline 가져오기 북마크 */
+  (function () {
+    var KEY = 'gift_wl_drawer', box = $('wl'), bm = $('wlBm'), line = window.GIFT_BOOKMARKLET || '';
+    var saved = null; try { saved = localStorage.getItem(KEY); } catch (e) {}
+    var off = saved ? saved === 'off' : window.innerWidth <= 1100;
+    function apply() { box.classList.toggle('off', off); try { localStorage.setItem(KEY, off ? 'off' : 'on'); } catch (e) {} }
+    apply();
+    $('wlTab').addEventListener('click', function () { off = !off; apply(); });
+    if (line) bm.setAttribute('href', line);
+    bm.addEventListener('click', function (e) { e.preventDefault(); toast('누르지 말고 <b>즐겨찾기 막대로 끌어다</b> 놓으세요. 그다음 workline.kr 화면에서 그 북마크를 누르면 돼요.', 6000); });
+    $('wlCopy').addEventListener('click', function () {
+      var done = function () { toast('주소를 복사했어요. 즐겨찾기 막대에서 오른쪽 클릭 → 페이지 추가 → URL 칸에 붙여넣기 하세요.', 7000); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(line).then(done, function () { fallback(); });
+      else fallback();
+      function fallback() { var ta = document.createElement('textarea'); ta.value = line; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); done(); } catch (e) { toast('복사하지 못했어요.'); } ta.remove(); }
+    });
+  })();
+
   boot();
 })();

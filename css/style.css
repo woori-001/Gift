@@ -14,7 +14,7 @@ html,body{margin:0}
 body{background:var(--bg);color:var(--text);font:14px/1.55 "Pretendard Variable",Pretendard,"Malgun Gothic","Apple SD Gothic Neo",sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
 button,input,select{font:inherit;color:inherit;letter-spacing:inherit}
 a{color:inherit}
-.app{display:grid;grid-template-columns:236px minmax(0,1fr);min-height:100vh}
+.app{display:grid;grid-template-columns:236px minmax(0,1fr) auto;min-height:100vh}
 
 /* ---------- 사이드바 ---------- */
 #side{position:sticky;top:0;height:100vh;overflow:hidden;background:var(--surface);border-right:1px solid var(--line);padding:0;display:flex;flex-direction:column}
@@ -447,3 +447,28 @@ table.t.sm{font-size:13px}.t.sm th,.t.sm td{padding:7px 8px}
 @media (max-width:1360px){.rmain .kpis.k5{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:1200px){.rlay{grid-template-columns:1fr}.rail{position:static;max-height:none;order:-1}.rmain .kpis.k5{grid-template-columns:repeat(5,minmax(0,1fr))}}
 @media (max-width:860px){.rmain .kpis.k5{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* ---------- 오른쪽 바: workline 가져오기 ---------- */
+.wl{position:sticky;top:0;height:100vh;width:276px;background:var(--bg);border-left:1px solid var(--line);transition:width .2s ease;z-index:30}
+.wl.off{width:14px}
+.wl-in{height:100%;overflow-y:auto;padding:20px 16px 20px 18px}
+.wl.off .wl-in{visibility:hidden}
+.wl-tab{position:absolute;left:-14px;top:96px;width:22px;height:56px;border:0;border-radius:10px 0 0 10px;background:var(--pri);color:#fff;cursor:pointer;display:grid;place-items:center;box-shadow:var(--shadow)}
+.wl-tab:hover{background:var(--pri-d)}
+.wl-tab svg{transform:rotate(180deg);transition:transform .2s}
+.wl.off .wl-tab svg{transform:none}
+.wl-card{background:linear-gradient(160deg,#5b8ffa,#3f74ef);color:#fff;border-radius:18px;padding:18px 16px;box-shadow:0 6px 20px rgba(63,116,239,.25)}
+.wl-card h3{margin:0 0 10px;font-size:16px;font-weight:800;display:flex;align-items:center;gap:8px}
+.wl-card p{margin:0 0 12px;font-size:13px;line-height:1.6;color:rgba(255,255,255,.92)}
+.wl-card b{color:#fff;font-weight:800}
+.wl-bm{display:flex;align-items:center;justify-content:center;gap:6px;height:48px;margin:4px 0 12px;border:2px dashed #a9c4fb;border-radius:14px;background:#fff;color:var(--pri-d);font-weight:800;font-size:14px;text-decoration:none;cursor:grab;box-shadow:0 0 0 4px rgba(255,255,255,.22)}
+.wl-bm:active{cursor:grabbing}
+.wl-card .wl-hint{font-size:12.5px}
+.wl-info{margin:0 0 12px;background:rgba(255,255,255,.14);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.wl-info div{display:grid;grid-template-columns:62px 1fr;gap:6px;font-size:12.5px;line-height:1.5}
+.wl-info dt{font-weight:800}
+.wl-info dd{margin:0;color:rgba(255,255,255,.9)}
+.wl-card .wl-note{font-size:12px;margin-bottom:10px}
+.wl-copy{border:0;background:none;color:rgba(255,255,255,.85);font-size:12px;text-decoration:underline;cursor:pointer;padding:0}
+.wl-copy:hover{color:#fff}
+@media (max-width:1100px){.app{grid-template-columns:236px minmax(0,1fr)}.wl{position:fixed;right:0;top:0;box-shadow:-8px 0 24px rgba(20,30,50,.08)}.wl.off{box-shadow:none}}
