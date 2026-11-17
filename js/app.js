@@ -458,6 +458,7 @@
       out.push(['info', '로우데이터에 다른 회차 건이 섞여 있어요. 누락은 올린 정산서 회차(<b>' + esc(res.roundDates.join(', ')) + '</b>)에 해당하는 건만 봤고, 다른 회차 <b>' + won(o.count) + '건</b>은 뺐어요.' +
         '<span class="rnames">' + od.map(function (d) { return esc(d) + ' ' + won(o.dates[d]) + '건'; }).join(', ') + '</span>']);
     }
+    if (res.refundSkipped && res.refundSkipped.length) out.push(['info', '정산서에 없는 <b>환수 ' + won(res.refundSkipped.length) + '건</b>은 누락으로 보지 않았어요. 환수는 일반 건을 복사해서 달려서 현금 칸에 사은품이 보여도 차감이 없는 게 정상이에요.']);
     if (Object.keys(sd).length > 1) out.push(['warn', '정산내역서에 정산예정일이 ' + Object.keys(sd).length + '개 섞여 있어요 (' + esc(Object.keys(sd).sort().join(', ')) + '). 다른 회차 파일이 섞였는지 확인하세요.']);
     if (extra.length) out.push(['warn', '정산내역서 회차(' + esc(extra.join(', ')) + ')가 로우데이터에 없어요. 로우데이터를 그 회차가 들어가게 받았는지 확인하세요.']);
     return out;

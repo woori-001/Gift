@@ -242,12 +242,15 @@ var Engine = (function () {
     // 누락은 올린 정산서의 정산예정일(회차)에 해당하는 로우만 판단. 다른 회차 로우는 따로 셈
     var stDates = {}; stmtRows.forEach(function (r) { if (r.정산예정일) stDates[r.정산예정일] = 1; });
     var hasDates = Object.keys(stDates).length > 0, otherRound = { count: 0, dates: {} };
+    // 환수는 일반 건을 복사해서 달리기 때문에 현금(사은품)이 같이 보여도 사은품 차감이 없는 게 정상 → 정산서에 없어도 누락으로 안 봄
+    var refundSkipped = [];
     var missing = rawRows.filter(function (r) {
       if (r._used) return false;
       if (hasDates && r.정산예정일 && !stDates[r.정산예정일]) { otherRound.count++; otherRound.dates[r.정산예정일] = (otherRound.dates[r.정산예정일] || 0) + 1; return false; }
+      if (r.정산종류 === '환수') { refundSkipped.push(r); return false; }
       return true;
     }).map(function (r) {
-      return { raw: r, paid: paidByUs(r) };
+      return { raw: r, paid: r.정산종류 === '일반' ? paidByUs(r) : 0 };
     });
     var stmtOnly = stmtRows.filter(function (r) { return !r._used; }).map(function (st) { return { st: st }; });
 
@@ -296,7 +299,7 @@ var Engine = (function () {
     var partners = Object.keys(parts).map(function (k) { return parts[k]; })
       .sort(function (a, b) { return b.undAmt - a.undAmt || b.miss - a.miss || a.name.localeCompare(b.name); });
 
-    return { otherRound: otherRound, roundDates: Object.keys(stDates).sort(), excluded: excluded, rawCount: rawRows.length, stmtCount: stmtRows.length, pairs: pairs, undeducted: undeducted, missing: missing, stmtOnly: stmtOnly, changed: changed, checks: checks, partners: partners };
+    return { refundSkipped: refundSkipped, otherRound: otherRound, roundDates: Object.keys(stDates).sort(), excluded: excluded, rawCount: rawRows.length, stmtCount: stmtRows.length, pairs: pairs, undeducted: undeducted, missing: missing, stmtOnly: stmtOnly, changed: changed, checks: checks, partners: partners };
   }
 
   return { htmlToGrid: htmlToGrid, gridToRecords: gridToRecords, run: run, paidByUs: paidByUs, normPartner: normPartner, isOwnBranch: isOwnBranch, nameMatch: nameMatch, nameLoose: nameLoose, normSvc: normSvc, DED: DED };
