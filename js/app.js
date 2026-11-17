@@ -466,12 +466,18 @@
     var noSt = state.res.partners.filter(function (p) { return p.stmt === 0 && p.raw > 0; });
     if (!noSt.length) return null;
     var n = noSt.reduce(function (a, p) { return a + p.raw; }, 0);
-    return ['info', '정산내역서가 없는 협력점 <b>' + noSt.length + '곳(' + won(n) + '건)</b>은 누락 목록에서 ' + (state.mode === 'saved' ? '저장하지 않았어요' : '기본으로 숨겼어요') + '. 정산서가 안 나간 곳인지, 파일을 덜 올린 건지 확인하세요.<span class="rnames">' +
+    var names = '<span class="rnames">' + noSt.slice(0, 20).map(function (p) { return esc(p.key); }).join(', ') + (noSt.length > 20 ? ' 외 ' + (noSt.length - 20) + '곳' : '') + '</span>';
+    if (state.mode !== 'saved' && stComplete()) return ['warn', '정산내역서가 아예 없는 협력점 <b>' + noSt.length + '곳(' + won(n) + '건)</b>이 있어요. workline에서 회차 정산서를 통째로 받았으니 정산서가 안 나간 거예요. 누락 목록에 넣었어요.' + names];
+    return ['info', '정산내역서가 없는 협력점 <b>' + noSt.length + '곳(' + won(n) + '건)</b>은 누락 목록에서 ' + (state.mode === 'saved' ? '저장하지 않았어요' : '기본으로 숨겼어요') + ' (환수 건은 그래도 보여줘요). 정산서가 안 나간 곳인지, 파일을 덜 올린 건지 확인하세요.<span class="rnames">' +
       noSt.slice(0, 20).map(function (p) { return esc(p.key); }).join(', ') + (noSt.length > 20 ? ' 외 ' + (noSt.length - 20) + '곳' : '') + '</span>'];
   }
 
   /* ═════════════ 탭 정의 ═════════════ */
   var partnerHasSt = function (key) { var p = state.res.partners.find(function (x) { return x.key === key; }); return p && p.stmt > 0; };
+  // workline 에서 회차 정산서를 통째로 받았으면, 정산서가 없는 협력점도 진짜로 정산서가 안 나간 것 → 누락에 포함
+  function stComplete() { return /^workline /.test(state.rawName || ''); }
+  // 누락 목록에 기본으로 보일 건: 정산서가 있는 협력점, 환수(정산에 안 들어가면 돈이 빠짐), workline 으로 통째로 받은 회차
+  function missShown(x) { return partnerHasSt(x.raw._partner) || x.raw.정산종류 === '환수' || stComplete(); }
   function R(x) { return x.raw || x.st; }
   function label(f) { return f.replace('차감내역_', '차감 '); }
   function typeTag(t) { return '<span class="badge t-' + esc(t) + '">' + esc(t) + '</span>'; }
@@ -531,7 +537,7 @@
         { h: '사은품 차감', num: true, v: function (x) { return x.raw.차감내역_사은품; } },
         { h: '', v: function (x) { return x.raw.정산종류 === '환수' ? 2 : x.paid > 0 && x.raw.정산종류 === '일반' ? 1 : 0; }, html: function (x) { return x.raw.정산종류 === '환수' ? '<span class="badge red">환수 미반영</span>' : x.paid > 0 && x.raw.정산종류 === '일반' ? '<span class="badge orange">사은품 지급</span>' : ''; } }
       ],
-      filter: function (x) { return baseFilter(x) && (state.noSt || partnerHasSt(x.raw._partner) || state.partner) && (!state.paidOnly || x.paid > 0); }
+      filter: function (x) { return baseFilter(x) && (state.noSt || missShown(x) || state.partner) && (!state.paidOnly || x.paid > 0); }
     },
     only: { label: '정산서에만', desc: '정산내역서에는 있는데 현재 로우에서 찾지 못한 건이에요. 접수가 삭제·취소됐거나 가입서비스·상품명이 바뀌었을 수 있어요.',
       rows: function () { return state.res.stmtOnly; }, typed: true,
@@ -670,7 +676,7 @@
   function renderKpis() {
     var r = state.res;
     var undAmt = r.undeducted.reduce(function (a, x) { return a + x.gap; }, 0);
-    var missVis = r.missing.filter(function (x) { return partnerHasSt(x.raw._partner); });
+    var missVis = r.missing.filter(missShown);
     var missPaid = missVis.filter(function (x) { return x.paid > 0 && x.raw.정산종류 === '일반'; }).length;
     var k = function (tab, c, icon, label, val, cls, sub) {
       return '<button class="kpi btn' + (state.tab === tab ? ' on' : '') + '" data-tab="' + tab + '"><div class="kt"><span class="ib ' + c + '">' + ic(icon) + '</span><span class="kl">' + label + '</span></div>' +
@@ -762,7 +768,7 @@
   function buildPayload(memo) {
     var r = state.res, m = r.meta, f = [];
     r.undeducted.forEach(function (x) { f.push(finding('und', x, x.gap, { paid: x.paid, stDed: x.stDed, rawDed: x.rawDed, gap: x.gap, reason: x.reason, note: x.note })); });
-    var missSaved = r.missing.filter(function (x) { return partnerHasSt(x.raw._partner); });
+    var missSaved = r.missing.filter(missShown);
     missSaved.forEach(function (x) { f.push(finding('miss', x, x.raw.정산금액, { paid: x.paid })); });
     r.stmtOnly.forEach(function (x) { f.push(finding('only', x, x.st.정산금액, {})); });
     r.changed.forEach(function (x) { f.push(finding('chg', x, x.delta, { diffs: x.diffs, note: x.note, delta: x.delta })); });
@@ -944,7 +950,7 @@
     var names = { partners: '협력점 요약', und: '1 미차감', miss: '2 정산서 누락', only: '3 정산서에만', chg: '4 금액 변동', chk: '5 확인 필요' };
     ORDER.forEach(function (k) {
       var t = TABS[k];
-      var rows = t.rows().filter(function (x) { return k === 'miss' ? (partnerHasSt(x.raw._partner) || state.noSt) : true; });
+      var rows = t.rows().filter(function (x) { return k === 'miss' ? (missShown(x) || state.noSt) : true; });
       var cols = t.cols.filter(function (c) { return c.h; });
       var aoa = [cols.map(function (c) { return c.h; })];
       rows.forEach(function (x) { aoa.push(cols.map(function (c) { return c.v(x); })); });
