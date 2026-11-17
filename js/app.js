@@ -5,6 +5,15 @@
   var $ = function (id) { return document.getElementById(id); };
   var won = function (n) { return (n || 0).toLocaleString('ko-KR'); };
   var esc = function (t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  // 가입서비스 번호 가리기: 숫자 7자리 이상 묶음에서 앞 3자리·뒤 4자리만 남김 (010-1234-5678 → 010-****-5678). 서버도 같은 규칙
+  function maskSvc(s) {
+    if (s == null || s === '') return s;
+    return String(s).replace(/\d[\d-]*/g, function (run) {
+      var n = run.replace(/\D/g, '').length; if (n < 7) return run;
+      var k = 0; return run.replace(/\d/g, function (d) { k++; return k > 3 && k <= n - 4 ? '*' : d; });
+    });
+  }
+  function maskRows(rows) { rows.forEach(function (r) { if (r.가입서비스) r.가입서비스 = maskSvc(r.가입서비스); }); return rows; }
   function mask(n) { n = String(n || ''); if (n.indexOf('*') >= 0 || n.length < 2) return n; return n[0] + '*' + n.slice(2); }
 
   // 아이콘 (upche-meeting과 같은 선 아이콘)
@@ -172,7 +181,8 @@
     return null;
   }
   function readFile(file) { return file.arrayBuffer().then(readBuffer); }
-  function readBuffer(buf) {
+  function readBuffer(buf) { return parseBuffer(buf).then(maskRows); }  // 읽자마자 번호를 가려서, 화면·저장·비교 모두 같은 값으로
+  function parseBuffer(buf) {
     return Promise.resolve(buf).then(function (buf) {
       var text = decodeText(buf);
       if (text) return Engine.gridToRecords(Engine.htmlToGrid(text));
@@ -203,7 +213,7 @@
       data: rows.map(function (r) { return FIELDS.map(function (f) { var v = r[f]; if (f === '고객명') v = mask(v); return v == null ? '' : v; }); })
     };
   }
-  function unpackFile(f) { return Engine.gridToRecords([f.cols].concat(f.data || [])); }
+  function unpackFile(f) { return maskRows(Engine.gridToRecords([f.cols].concat(f.data || []))); }
 
   function refreshWorks() {
     return Api.workList().then(function (l) { state.works = l; return l; }).catch(function (err) { authFail(err); state.works = state.works || []; return state.works; });
@@ -365,7 +375,7 @@
       '<div class="card upl">' +
         '<div class="steps"><i class="' + (hasRaw ? 'done' : 'on') + '"></i><i class="' + (sts.length ? 'done' : hasRaw ? 'on' : '') + '"></i><i class="' + (ready ? 'on' : '') + '"></i></div>' +
         '<h2>검수할 파일을 올려주세요</h2>' +
-        '<p class="sub">올린 파일은 회차별로 서버에 자동 저장돼서, 나중에 들어와도 이어서 할 수 있어요. 고객명은 가려서 저장해요.</p>' +
+        '<p class="sub">올린 파일은 회차별로 서버에 자동 저장돼서, 나중에 들어와도 이어서 할 수 있어요. 고객명·가입서비스 번호는 가려서 저장하고, 정산예정일 30일이 지나면 자동으로 비워져요.</p>' +
         '<div class="syncrow" id="syncRow">' + syncLine() + '</div>' +
         '<ol class="stepl">' +
           '<li id="liRaw" class="' + (hasRaw ? 'done' : '') + (state.rawErr ? ' err' : '') + '"><span>' + (hasRaw ? ic('check', 13) : '1') + '</span><div><b>현재 로우데이터</b><small>' + rawSmall + '</small></div>' +
@@ -740,12 +750,13 @@
     if (!r) return null;
     var o = {}; KEEP.forEach(function (k) { if (r[k] !== undefined && r[k] !== '') o[k] = r[k]; });
     if (o.고객명) o.고객명 = mask(o.고객명);   // 정산서의 실명은 저장하지 않음
+    if (o.가입서비스) o.가입서비스 = maskSvc(o.가입서비스);
     return o;
   }
   function finding(kind, x, amount, extra) {
     var r = R(x), d = { raw: pick(x.raw), st: pick(x.st) };
     for (var k in extra) d[k] = extra[k];
-    return { kind: kind, partner: r._partner || '', type: r.정산종류 || '', name: mask(r.고객명), svc: r.가입서비스 || '',
+    return { kind: kind, partner: r._partner || '', type: r.정산종류 || '', name: mask(r.고객명), svc: maskSvc(r.가입서비스 || ''),
       product: (r.상품명 || '') + (r.상품옵션 ? ' · ' + r.상품옵션 : ''), openDate: r.개통일 || '', amount: amount || 0, detail: d };
   }
   function buildPayload(memo) {
