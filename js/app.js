@@ -57,13 +57,16 @@
     $('login').hidden = false; $('loginErr').textContent = msg || '';
     setTimeout(function () { var i = $('loginId'); if (i && !i.value) i.focus(); else $('loginPw').focus(); }, 50);
   }
+  var appReady = false;
   function enterApp(user) {
-    state.user = user;
+    state.user = user; appReady = false;
     $('login').hidden = true; $('app').hidden = false;
     renderSide(); renderMain();
     refreshHistCount();
     refreshWorks().then(function (list) {
+      appReady = true;
       if (pendingImport) { var d = pendingImport; pendingImport = null; return processImport(d); }
+      if (importing) return;
       var id = remembered();
       var hit = id && list.filter(function (w) { return w.id === id; })[0];
       if (hit && !state.raw && !state.stmts.length && !state.res) loadWork(hit.id);
@@ -983,7 +986,7 @@
    * 북마크가 받은 엑셀(전체정산관리 현재·OD)과 정산내역서 zip 을 postMessage 로 보내요.
    * workline.kr 에서 온 메시지만 받아요. */
   var WL_ORIGIN = 'https://workline.kr';
-  var pendingImport = null, importDone = false;
+  var pendingImport = null, importDone = false, importing = false;
   function loadJSZip() {
     if (window.JSZip) return Promise.resolve(window.JSZip);
     return new Promise(function (res, rej) {
@@ -1012,46 +1015,91 @@
       }));
     });
   }
+  /* 가져오기 진행 상황 카드 (오른쪽 아래). workline 쪽 진행 + 이 화면에서 읽기·저장 진행을 같이 보여줘요 */
+  var imp = { on: false, lines: [], state: 'run', summary: '' };
+  function impRender() {
+    var el = $('imp');
+    if (!imp.on) { if (el) el.remove(); return; }
+    if (!el) { el = document.createElement('div'); el.id = 'imp'; document.body.appendChild(el); }
+    var head = imp.state === 'ok' ? '<span class="imp-ic ok">✓</span>가져오기 완료' : imp.state === 'err' ? '<span class="imp-ic err">!</span>가져오기 실패' : '<span class="spin"></span>workline에서 가져오는 중';
+    el.className = 'imp ' + imp.state;
+    el.innerHTML = '<div class="imp-h"><b>' + head + '</b>' + (imp.state !== 'run' ? '<button class="icon" data-x aria-label="닫기">' + ic('x', 16) + '</button>' : '') + '</div>' +
+      '<ol class="imp-l">' + imp.lines.map(function (l) { return '<li class="' + (l.err ? 'err' : l.ok ? 'ok' : '') + '">' + esc(l.msg) + '</li>'; }).join('') + '</ol>' +
+      (imp.summary ? '<div class="imp-s">' + imp.summary + '</div>' : '');
+    var l = el.querySelector('.imp-l'); l.scrollTop = l.scrollHeight;
+    var x = el.querySelector('[data-x]'); if (x) x.onclick = function () { imp.on = false; impRender(); };
+  }
+  function impLog(msg, kind) { imp.on = true; imp.lines.push({ msg: msg, err: kind === 'err', ok: kind === 'ok' }); impRender(); }
+  function impEnd(stateName, summary) { imp.state = stateName; imp.summary = summary || ''; impRender(); }
+
   function processImport(d) {
-    busy(true, 'workline 데이터를 여는 중...');
+    importing = true;
+    impLog('검수 앱이 파일을 받았어요');
     var raws = d.raw || [];
-    return Promise.all(raws.map(function (r) { return readBuffer(r.buf).then(function (rows) { return { src: r.source, name: r.name, rows: rows }; }); }))
+    impLog('로우데이터 읽는 중...');
+    return new Promise(function (r) { setTimeout(r, 30); })
+      .then(function () { return Promise.all(raws.map(function (r) { return readBuffer(r.buf).then(function (rows) { return { src: r.source, name: r.name, rows: rows }; }); })); })
       .then(function (rawParts) {
-        busy(true, '정산내역서 압축을 푸는 중...');
+        impLog('정산내역서 압축 푸는 중...');
         return (d.stmtZip ? unzipStatements(d.stmtZip.buf) : Promise.resolve([])).then(function (stmts) { return { rawParts: rawParts, stmts: stmts }; });
       })
       .then(function (x) {
         var rows = [], parts = [];
-        x.rawParts.forEach(function (p) { rows = rows.concat(p.rows); parts.push((p.src === 'od' ? 'OD ' : '현재 ') + won(p.rows.length) + '건'); });
+        x.rawParts.forEach(function (p) { rows = rows.concat(p.rows); parts.push((p.src === 'od' ? 'OD ' : '지금 ') + won(p.rows.length) + '건'); });
         rows.forEach(function (r, i) { r.No = String(i + 1); });
         var date = d.settleDate || topDate(rows);
         var rawName = 'workline 전체정산관리 ' + date + ' (' + parts.join(' + ') + ')';
         var okSt = x.stmts.filter(function (s) { return !s.error && s.rows.length; });
-        busy(true, '서버에 회차 작업을 여는 중...');
+        var badSt = x.stmts.length - okSt.length;
+        impLog('로우데이터 ' + won(rows.length) + '건 (' + parts.join(' + ') + ')', 'ok');
+        impLog('정산내역서 ' + won(okSt.length) + '개' + (badSt ? ' · 읽지 못한 파일 ' + badSt + '개' : ''), badSt ? 'err' : 'ok');
+        impLog(date + ' 회차 작업 여는 중...');
         return Api.workOpen(date).then(function (w) {
           // 같은 회차에 올려둔 파일이 있으면 비우고 새로 받은 것으로 바꿈
-          return (w.raw || w.stmtFiles) ? Api.workRemoveFiles(w.id, null, null).then(function (r) { return r.work; }) : w;
+          if (w.raw || w.stmtFiles) { impLog('같은 회차에 올려둔 파일을 새로 받은 것으로 바꿔요'); return Api.workRemoveFiles(w.id, null, null).then(function (r) { return r.work; }); }
+          return w;
         }).then(function (w) {
           state.mode = 'live'; state.res = null; state.savedRun = null; state.showResult = false;
           state.work = w; remember(w.id);
           state.raw = rows; state.rawName = rawName; state.rawErr = '';
           state.stmts = x.stmts;
-          busy(false); state.view = 'check'; renderSide(); renderMain();
-          toast('workline에서 받았어요 · 로우 ' + won(rows.length) + '건(' + parts.join(' + ') + '), 정산내역서 ' + won(okSt.length) + '개. 서버에 저장 중이에요.', 7000);
-          return syncFiles('raw', [{ name: rawName, rows: rows }]).then(function () { return syncFiles('stmt', okSt); });
+          state.view = 'check'; renderSide(); renderMain();
+          impLog('서버에 저장 중... (로우데이터)');
+          return syncFiles('raw', [{ name: rawName, rows: rows }]).then(function () {
+            if (state.sync && state.sync.status === 'err') throw new Error('로우데이터 저장 실패: ' + state.sync.msg);
+            impLog('서버에 저장 중... (정산내역서 ' + won(okSt.length) + '개)');
+            return syncFiles('stmt', okSt);
+          }).then(function () {
+            if (state.sync && state.sync.status === 'err') throw new Error('정산내역서 저장 실패: ' + state.sync.msg);
+            impLog('서버 저장 완료', 'ok');
+            impEnd('ok', '<b>' + esc(date) + ' 회차</b> · 로우 ' + won(rows.length) + '건, 정산내역서 ' + won(okSt.length) + '개가 들어갔어요. 아래 <b>[검수 실행]</b>을 누르세요.');
+          });
         });
       })
-      .catch(function (err) { busy(false); fail(err); });
+      .catch(function (err) {
+        if (authFail(err)) { pendingImport = d; impLog('로그인이 필요해요. 로그인하면 이어서 올라가요.', 'err'); return; }
+        impLog(err.message || String(err), 'err'); impEnd('err');
+      })
+      .then(function () { importing = false; });
   }
   window.addEventListener('message', function (e) {
-    if (e.origin !== WL_ORIGIN || !e.data || e.data.type !== 'gift-import') return;
-    if (importDone) return;
+    if (e.origin !== WL_ORIGIN || !e.data) return;
+    var d = e.data;
+    if (d.type === 'gift-progress') {
+      if (importDone) return;
+      impLog(String(d.msg || ''), d.err ? 'err' : d.ok ? 'ok' : '');
+      if (d.fail) { impEnd('err'); importDone = true; }
+      return;
+    }
+    if (d.type !== 'gift-import' || importDone) return;
     importDone = true;
     try { e.source.postMessage({ type: 'gift-import-received' }, WL_ORIGIN); } catch (er) {}
-    if (state.user && !$('app').hidden) processImport(e.data);
-    else { pendingImport = e.data; toast('workline 데이터를 받았어요. 로그인하면 바로 올라가요.', 0); }
+    if (appReady) processImport(d);
+    else { pendingImport = d; impLog('파일을 받았어요. ' + (state.user ? '화면 준비되면 바로 올라가요.' : '로그인하면 바로 올라가요.')); }
   });
   if (/wl-import/.test(location.hash) && window.opener) {
+    imp.on = true; imp.lines.push({ msg: 'workline 창과 연결하는 중...' }); setTimeout(impRender, 0);
+    setTimeout(function () { $('wl').classList.add('off'); }, 0); // 가져올 땐 오른쪽 바를 접어서 진행 카드가 잘 보이게
     var hello = setInterval(function () {
       if (importDone || !window.opener) return clearInterval(hello);
       try { window.opener.postMessage({ type: 'gift-ready' }, WL_ORIGIN); } catch (e) {}

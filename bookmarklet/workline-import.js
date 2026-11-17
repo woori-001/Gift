@@ -33,7 +33,15 @@
   document.body.appendChild(box);
   var q = function (s) { return box.querySelector('[' + s + ']'); };
   var logEl = q('data-log');
-  function log(m, err) { logEl.innerHTML += '<div style="color:' + (err ? '#f04452' : '#4e5968') + '">' + m.replace(/</g, '&lt;') + '</div>'; logEl.scrollTop = 1e6; }
+  // 진행 상황은 이 작은 창에도 쓰고, 검수 앱 창에도 같이 보내요(검수 앱이 준비되기 전 것은 모아뒀다가 한 번에)
+  var fwd = { win: null, ready: false, queue: [] };
+  function post(msg) { try { fwd.win.postMessage(msg, GIFT_ORIGIN); } catch (e) {} }
+  function log(m, err, extra) {
+    logEl.innerHTML += '<div style="color:' + (err ? '#f04452' : '#4e5968') + '">' + m.replace(/</g, '&lt;') + '</div>'; logEl.scrollTop = 1e6;
+    if (!fwd.win) return;
+    var msg = Object.assign({ type: 'gift-progress', msg: m.replace(/^[·✕✓]\s*/, ''), err: !!err }, extra || {});
+    if (fwd.ready) post(msg); else fwd.queue.push(msg);
+  }
   q('data-x').onclick = function () { box.remove(); };
 
   var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
@@ -76,7 +84,7 @@
       return poll().then(function (job) {
         if (!job.rowCount) { log('· ' + tag + ': 0건'); return null; }
         return bin('/api/orders/export-jobs/' + id + '/download').then(function (d) {
-          log('· ' + tag + ': ' + job.rowCount.toLocaleString() + '건 받음');
+          log('· ' + tag + ': ' + job.rowCount.toLocaleString() + '건 받음', 0, { ok: true });
           return { name: job.fileName || ('전체정산관리_' + tag + '.xlsx'), buf: d.buf, source: od ? 'od' : 'now', rows: job.rowCount };
         });
       });
@@ -91,7 +99,7 @@
       if (d.max && d.total > d.max) throw new Error('정산내역서가 ' + d.total + '개라 한 번에 받을 수 있는 ' + d.max + '개를 넘어요. 기간을 나눠 주세요.');
       log('· 정산내역서 ' + d.total + '개 받는 중...' + (d.missing ? ' (파일 없는 ' + d.missing + '개 제외)' : ''));
       return bin('/api/exact/statements/bulk-excel' + qs).then(function (z) {
-        log('· 정산내역서 압축파일 받음 (' + Math.round(z.buf.byteLength / 1024).toLocaleString() + 'KB)');
+        log('· 정산내역서 압축파일 받음 (' + Math.round(z.buf.byteLength / 1024).toLocaleString() + 'KB)', 0, { ok: true });
         return { name: '정산내역서_' + from + '_' + to + '.zip', buf: z.buf, count: d.withFile || d.total };
       });
     });
@@ -106,6 +114,7 @@
     var win = window.open(GIFT + '?wl=' + Date.now() + '#wl-import', 'gift_import');
     if (!win) { log('검수 앱 창이 차단됐어요. 주소창 오른쪽의 팝업 허용을 누른 뒤 다시 눌러주세요.', 1); return; }
     busy = true; this.disabled = true; this.style.opacity = '.6'; logEl.innerHTML = '';
+    fwd = { win: win, ready: false, queue: [] };
     var ready = false, sent = false;
     var payload = null;
     function trySend() {
@@ -114,10 +123,11 @@
       var tr = payload.raw.map(function (r) { return r.buf; }); if (payload.stmtZip) tr.push(payload.stmtZip.buf);
       win.postMessage(payload, GIFT_ORIGIN, tr);
       log('· 검수 앱으로 보냈어요. 그 창에서 확인하세요.');
+      fwd.win = null;
     }
     function onMsg(e) {
       if (e.origin !== GIFT_ORIGIN || !e.data) return;
-      if (e.data.type === 'gift-ready') { ready = true; trySend(); }
+      if (e.data.type === 'gift-ready' && !ready) { ready = true; fwd.ready = true; fwd.queue.forEach(post); fwd.queue = []; trySend(); }
       if (e.data.type === 'gift-import-received') { log('✓ 검수 앱이 받았어요.'); window.removeEventListener('message', onMsg); }
     }
     window.addEventListener('message', onMsg);
@@ -134,7 +144,7 @@
           trySend();
         });
       })
-      .catch(function (err) { log('✕ ' + err.message, 1); try { if (!sent) win.close(); } catch (e) {} })
+      .catch(function (err) { log('✕ ' + err.message, 1, { fail: true }); })
       .then(function () { busy = false; btn.disabled = false; btn.style.opacity = ''; });
   };
 })();
