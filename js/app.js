@@ -63,6 +63,7 @@
     renderSide(); renderMain();
     refreshHistCount();
     refreshWorks().then(function (list) {
+      if (pendingImport) { var d = pendingImport; pendingImport = null; return processImport(d); }
       var id = remembered();
       var hit = id && list.filter(function (w) { return w.id === id; })[0];
       if (hit && !state.raw && !state.stmts.length && !state.res) loadWork(hit.id);
@@ -167,8 +168,9 @@
     }
     return null;
   }
-  function readFile(file) {
-    return file.arrayBuffer().then(function (buf) {
+  function readFile(file) { return file.arrayBuffer().then(readBuffer); }
+  function readBuffer(buf) {
+    return Promise.resolve(buf).then(function (buf) {
       var text = decodeText(buf);
       if (text) return Engine.gridToRecords(Engine.htmlToGrid(text));
       if (typeof XLSX === 'undefined') throw new Error('엑셀 해석 라이브러리를 불러오지 못했어요. 인터넷 연결을 확인하세요.');
@@ -212,10 +214,10 @@
   function setSync(s) { state.sync = s; renderSide(); if (state.view === 'check' && !(state.res && state.showResult !== false)) renderUpload(); }
   // kind: raw | stmt, items: [{name, rows}]
   function syncFiles(kind, items) {
-    if (state.mode === 'demo' || !items.length) return;
+    if (state.mode === 'demo' || !items.length) return Promise.resolve();
     setSync({ status: 'saving' });
     var all = []; items.forEach(function (it) { all = all.concat(it.rows); });
-    ensureWork(all).then(function (w) {
+    return ensureWork(all).then(function (w) {
       var packs = items.map(function (it) { return packFile(kind, it.name, it.rows); });
       var other = packs.filter(function (p) { return p.settleDate && p.settleDate !== w.settleDate; });
       if (other.length) toast('다른 회차(' + esc(other[0].settleDate) + ') 파일이 섞였어요: ' + esc(other.map(function (p) { return p.name; }).slice(0, 3).join(', ')) + (other.length > 3 ? ' 외 ' + (other.length - 3) + '개' : '') + '. 지금 작업은 ' + esc(w.settleDate) + ' 회차예요.', 8000);
@@ -974,6 +976,88 @@
     state.savedRun = null;
     runCheck();
     state.mode = 'demo';
+  }
+
+  /* ═════════════ workline 북마크에서 데이터 받기 ═════════════
+   * workline.kr 에서 북마크를 누르면 이 창이 #wl-import 로 열리고,
+   * 북마크가 받은 엑셀(전체정산관리 현재·OD)과 정산내역서 zip 을 postMessage 로 보내요.
+   * workline.kr 에서 온 메시지만 받아요. */
+  var WL_ORIGIN = 'https://workline.kr';
+  var pendingImport = null, importDone = false;
+  function loadJSZip() {
+    if (window.JSZip) return Promise.resolve(window.JSZip);
+    return new Promise(function (res, rej) {
+      var s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+      s.onload = function () { res(window.JSZip); };
+      s.onerror = function () { rej(new Error('압축 해제 라이브러리를 불러오지 못했어요.')); };
+      document.head.appendChild(s);
+    });
+  }
+  // zip 안 파일 이름: UTF-8 이 아니면 한글 윈도(CP949)로 다시 읽음
+  function zipName(bytes) {
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch (e) {}
+    try { return new TextDecoder('euc-kr').decode(bytes); } catch (e) { return String.fromCharCode.apply(null, bytes); }
+  }
+  function unzipStatements(buf) {
+    return loadJSZip().then(function (JSZip) {
+      return JSZip.loadAsync(buf, { decodeFileName: zipName });
+    }).then(function (zip) {
+      var entries = [];
+      zip.forEach(function (path, f) { if (!f.dir && /\.(xlsx?|html?|csv)$/i.test(path)) entries.push(f); });
+      return Promise.all(entries.map(function (f) {
+        var name = f.name.split('/').pop();
+        return f.async('arraybuffer').then(readBuffer).then(function (rows) { return { name: name, rows: rows }; },
+          function (err) { return { name: name, rows: [], error: err.message }; });
+      }));
+    });
+  }
+  function processImport(d) {
+    busy(true, 'workline 데이터를 여는 중...');
+    var raws = d.raw || [];
+    return Promise.all(raws.map(function (r) { return readBuffer(r.buf).then(function (rows) { return { src: r.source, name: r.name, rows: rows }; }); }))
+      .then(function (rawParts) {
+        busy(true, '정산내역서 압축을 푸는 중...');
+        return (d.stmtZip ? unzipStatements(d.stmtZip.buf) : Promise.resolve([])).then(function (stmts) { return { rawParts: rawParts, stmts: stmts }; });
+      })
+      .then(function (x) {
+        var rows = [], parts = [];
+        x.rawParts.forEach(function (p) { rows = rows.concat(p.rows); parts.push((p.src === 'od' ? 'OD ' : '현재 ') + won(p.rows.length) + '건'); });
+        rows.forEach(function (r, i) { r.No = String(i + 1); });
+        var date = d.settleDate || topDate(rows);
+        var rawName = 'workline 전체정산관리 ' + date + ' (' + parts.join(' + ') + ')';
+        var okSt = x.stmts.filter(function (s) { return !s.error && s.rows.length; });
+        busy(true, '서버에 회차 작업을 여는 중...');
+        return Api.workOpen(date).then(function (w) {
+          // 같은 회차에 올려둔 파일이 있으면 비우고 새로 받은 것으로 바꿈
+          return (w.raw || w.stmtFiles) ? Api.workRemoveFiles(w.id, null, null).then(function (r) { return r.work; }) : w;
+        }).then(function (w) {
+          state.mode = 'live'; state.res = null; state.savedRun = null; state.showResult = false;
+          state.work = w; remember(w.id);
+          state.raw = rows; state.rawName = rawName; state.rawErr = '';
+          state.stmts = x.stmts;
+          busy(false); state.view = 'check'; renderSide(); renderMain();
+          toast('workline에서 받았어요 · 로우 ' + won(rows.length) + '건(' + parts.join(' + ') + '), 정산내역서 ' + won(okSt.length) + '개. 서버에 저장 중이에요.', 7000);
+          return syncFiles('raw', [{ name: rawName, rows: rows }]).then(function () { return syncFiles('stmt', okSt); });
+        });
+      })
+      .catch(function (err) { busy(false); fail(err); });
+  }
+  window.addEventListener('message', function (e) {
+    if (e.origin !== WL_ORIGIN || !e.data || e.data.type !== 'gift-import') return;
+    if (importDone) return;
+    importDone = true;
+    try { e.source.postMessage({ type: 'gift-import-received' }, WL_ORIGIN); } catch (er) {}
+    if (state.user && !$('app').hidden) processImport(e.data);
+    else { pendingImport = e.data; toast('workline 데이터를 받았어요. 로그인하면 바로 올라가요.', 0); }
+  });
+  if (/wl-import/.test(location.hash) && window.opener) {
+    var hello = setInterval(function () {
+      if (importDone || !window.opener) return clearInterval(hello);
+      try { window.opener.postMessage({ type: 'gift-ready' }, WL_ORIGIN); } catch (e) {}
+    }, 700);
+    setTimeout(function () { clearInterval(hello); }, 180000);
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
   }
 
   boot();
