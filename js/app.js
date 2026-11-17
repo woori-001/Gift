@@ -458,7 +458,6 @@
       out.push(['info', '로우데이터에 다른 회차 건이 섞여 있어요. 누락은 올린 정산서 회차(<b>' + esc(res.roundDates.join(', ')) + '</b>)에 해당하는 건만 봤고, 다른 회차 <b>' + won(o.count) + '건</b>은 뺐어요.' +
         '<span class="rnames">' + od.map(function (d) { return esc(d) + ' ' + won(o.dates[d]) + '건'; }).join(', ') + '</span>']);
     }
-    if (res.refundSkipped && res.refundSkipped.length) out.push(['info', '정산서에 없는 <b>환수 ' + won(res.refundSkipped.length) + '건</b>은 누락으로 보지 않았어요. 환수는 일반 건을 복사해서 달려서 현금 칸에 사은품이 보여도 차감이 없는 게 정상이에요.']);
     if (Object.keys(sd).length > 1) out.push(['warn', '정산내역서에 정산예정일이 ' + Object.keys(sd).length + '개 섞여 있어요 (' + esc(Object.keys(sd).sort().join(', ')) + '). 다른 회차 파일이 섞였는지 확인하세요.']);
     if (extra.length) out.push(['warn', '정산내역서 회차(' + esc(extra.join(', ')) + ')가 로우데이터에 없어요. 로우데이터를 그 회차가 들어가게 받았는지 확인하세요.']);
     return out;
@@ -517,7 +516,7 @@
       ],
       filter: baseFilter
     },
-    miss: { label: '정산서 누락', desc: '현재 로우에는 있는데 올린 정산내역서 어디에도 없는 건이에요. 사은품 지급이 있는 일반 건은 차감 없이 넘어갔을 가능성이 커요.',
+    miss: { label: '정산서 누락', desc: '현재 로우에는 있는데 올린 정산내역서 어디에도 없는 건이에요. 사은품 지급이 있는 일반 건은 차감 없이 넘어갔을 가능성이 커요. 환수 건은 사은품과 상관없이, 환수가 정산에 안 들어간 거예요.',
       rows: function () { return state.res.missing; }, typed: true, noSt: true, paid: true,
       cols: [
         { h: '협력점', v: function (x) { return x.raw._partner; }, html: function (x) { return '<b>' + esc(x.raw._partner) + '</b>' + (partnerHasSt(x.raw._partner) ? '' : '<span class="small">정산서 없음</span>'); } },
@@ -528,9 +527,9 @@
         { h: '개통상태', v: function (x) { return x.raw.개통상태; } },
         { h: '정산금액', num: true, v: function (x) { return x.raw.정산금액; } },
         { h: '지급처', v: function (x) { return x.raw.사은품지급처; } },
-        { h: '지급액', num: true, v: function (x) { return x.paid; } },
+        { h: '지급액', num: true, v: function (x) { return x.paid; }, html: function (x) { return x.raw.정산종류 === '일반' ? won(x.paid) : '<span class="small">해당 없음</span>'; } },
         { h: '사은품 차감', num: true, v: function (x) { return x.raw.차감내역_사은품; } },
-        { h: '', v: function (x) { return x.paid > 0 && x.raw.정산종류 === '일반' ? 1 : 0; }, html: function (x) { return x.paid > 0 && x.raw.정산종류 === '일반' ? '<span class="badge orange">사은품 지급</span>' : ''; } }
+        { h: '', v: function (x) { return x.raw.정산종류 === '환수' ? 2 : x.paid > 0 && x.raw.정산종류 === '일반' ? 1 : 0; }, html: function (x) { return x.raw.정산종류 === '환수' ? '<span class="badge red">환수 미반영</span>' : x.paid > 0 && x.raw.정산종류 === '일반' ? '<span class="badge orange">사은품 지급</span>' : ''; } }
       ],
       filter: function (x) { return baseFilter(x) && (state.noSt || partnerHasSt(x.raw._partner) || state.partner) && (!state.paidOnly || x.paid > 0); }
     },

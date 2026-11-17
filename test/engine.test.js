@@ -150,13 +150,14 @@ test('현금사은품·지급예정일이 있는데 유치자지급이거나 차
   assert.strictEqual(by('사*자'), '', '지급예정일 없이 현금 칸만 있는 건은 오류 아님');
 });
 
-test('환수 건은 정산서에 없어도 누락으로 보지 않음', () => {
+test('정산서에 없는 환수 건은 누락이지만 사은품 지급으로 보지 않음', () => {
   const st = toRecords([row({ 고객명: '한가람', 가입서비스: 'z!1', 상품명: 'KT_인터넷', 협력점: '★가상○', 정산예정일: '2026-11-13' })]);
   const raw = toRecords([
     row({ 고객명: '한*람', 가입서비스: 'z!1', 상품명: 'KT_인터넷', 협력점: '★가상○', 정산예정일: '2026-11-13' }),
     row({ 정산종류: '환수', 고객명: '박*훈', 가입서비스: 'z!2', 상품명: 'SkyLife_인터넷', 협력점: '★가상○', 정산예정일: '2026-11-13', 사은품지급처: '웨이브넷 지급', 현금: 510000, 정산금액: -648000 })
   ]);
   const res = Engine.run(raw, st);
-  assert.equal(res.missing.length, 0);
-  assert.equal(res.refundSkipped.length, 1);
+  assert.equal(res.missing.length, 1);
+  assert.equal(res.missing[0].raw.정산종류, '환수');
+  assert.equal(res.missing[0].paid, 0);
 });
