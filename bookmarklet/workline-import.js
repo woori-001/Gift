@@ -39,7 +39,7 @@
   var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
   function api(url, hdr) {
     return fetch(url, { credentials: 'same-origin', headers: Object.assign({ Accept: 'application/json' }, hdr || {}) }).then(function (r) {
-      if (r.status === 401 || r.status === 403) throw new Error('workline 로그인이 풀렸어요. 다시 로그인한 뒤 눌러주세요.');
+      if (r.status === 401) throw new Error('workline 로그인이 풀렸어요. 다시 로그인한 뒤 눌러주세요.');
       return r.text().then(function (t) {
         var j = null; try { j = JSON.parse(t); } catch (e) {}
         if (!r.ok) throw new Error((j && (j.message || j.error)) || ('workline 응답 오류 ' + r.status));
@@ -56,6 +56,7 @@
   // 전체 정산 관리 엑셀: 내보내기 작업을 만들고, 끝나면 받기
   function exportCalc(date, od) {
     var tag = od ? 'OD' : '지금 데이터';
+    // OD 는 엑셀 만들기 요청에만 표시를 붙이고, 진행 확인·받기는 평소처럼 해요(붙이면 workline 이 거절함)
     var hdr = od ? { 'X-Data-Source': 'old' } : {};
     log('· ' + tag + ' 엑셀 만드는 중...');
     return api('/api/exact/calc/export?dateChk=4&dateFrom=' + date + '&dateTo=' + date, hdr).then(function (j) {
@@ -63,7 +64,7 @@
       if (!id) throw new Error(tag + ' 엑셀 작업을 시작하지 못했어요.');
       var tries = 0;
       function poll() {
-        return api('/api/orders/export-jobs/' + id, hdr).then(function (s) {
+        return api('/api/orders/export-jobs/' + id).then(function (s) {
           var job = s.job || s;
           if (job.status === 'done' && job.downloadable) return job;
           if (job.status === 'done' && !job.rowCount) return job;
@@ -74,7 +75,7 @@
       }
       return poll().then(function (job) {
         if (!job.rowCount) { log('· ' + tag + ': 0건'); return null; }
-        return bin('/api/orders/export-jobs/' + id + '/download', hdr).then(function (d) {
+        return bin('/api/orders/export-jobs/' + id + '/download').then(function (d) {
           log('· ' + tag + ': ' + job.rowCount.toLocaleString() + '건 받음');
           return { name: job.fileName || ('전체정산관리_' + tag + '.xlsx'), buf: d.buf, source: od ? 'od' : 'now', rows: job.rowCount };
         });
