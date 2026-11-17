@@ -1,9 +1,8 @@
 /* workline.kr → 사은품 차감 검수 데이터 가져오기 북마크
  * workline.kr 에 로그인한 화면에서 북마크를 누르면 작은 창이 뜨고,
- * [가져오기]를 누르면 아래 세 가지를 받아서 검수 앱으로 넘겨요.
+ * [가져오기]를 누르면 아래 두 가지를 받아서 검수 앱으로 넘겨요.
  *  1) 전체 정산 관리 · 정산예정일 기준 엑셀 (지금 데이터)
- *  2) 같은 조건의 OD(옛날 데이터) 엑셀
- *  3) 전체 정산 내역서 · 등록일 기간 일괄다운(zip)
+ *  2) 전체 정산 내역서 · 등록일 기간 일괄다운(zip)
  * 받은 파일은 workline 서버에서 브라우저로만 오고, 검수 앱 창으로 바로 넘겨요.
  * README 의 "북마크 만들기" 에 있는 한 줄짜리 javascript: 주소가 이 파일을 줄인 것이에요. */
 (function () {
@@ -24,7 +23,7 @@
   box.style.cssText = 'position:fixed;z-index:2147483647;top:16px;right:16px;width:320px;background:#fff;color:#191f28;border:1px solid #e5e8eb;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.18);font:14px/1.5 Pretendard,-apple-system,"Malgun Gothic",sans-serif;padding:16px';
   box.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b style="font-size:15px">사은품 검수로 가져오기</b><button data-x style="border:0;background:none;font-size:18px;cursor:pointer;color:#8b95a1">×</button></div>' +
-    '<label style="display:block;font-size:12px;color:#4e5968;margin-bottom:2px">정산예정일 (전체 정산 관리 · 지금 + OD)</label>' +
+    '<label style="display:block;font-size:12px;color:#4e5968;margin-bottom:2px">정산예정일 (전체 정산 관리)</label>' +
     '<input data-sd type="date" value="' + ymd(fri) + '" style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #d1d6db;border-radius:8px;margin-bottom:10px">' +
     '<label style="display:block;font-size:12px;color:#4e5968;margin-bottom:2px">정산내역서 등록일</label>' +
     '<div style="display:flex;gap:6px;align-items:center;margin-bottom:12px"><input data-f type="date" value="' + ymd(thu) + '" style="flex:1;min-width:0;padding:7px 6px;border:1px solid #d1d6db;border-radius:8px"><span>~</span><input data-t type="date" value="' + ymd(fri) + '" style="flex:1;min-width:0;padding:7px 6px;border:1px solid #d1d6db;border-radius:8px"></div>' +
@@ -132,11 +131,12 @@
     }
     window.addEventListener('message', onMsg);
     var btn = this;
+    // OD(옛날 데이터)는 받지 않아요
     exportCalc(sd, false)
-      .then(function (a) { return exportCalc(sd, true).then(function (b) { return [a, b]; }); })
+      .then(function (a) { return [a]; })
       .then(function (raws) {
         raws = raws.filter(Boolean);
-        if (!raws.length) throw new Error('정산예정일 ' + sd + ' 데이터가 지금·OD 모두 0건이에요.');
+        if (!raws.length) throw new Error('정산예정일 ' + sd + ' 전체 정산 관리 데이터가 0건이에요.');
         return getStatements(f, t).then(function (z) {
           payload = { type: 'gift-import', v: 1, settleDate: sd, stmtRange: [f, t],
             raw: raws.map(function (r) { return { name: r.name, buf: r.buf, source: r.source }; }), stmtZip: z };

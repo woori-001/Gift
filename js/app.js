@@ -1000,7 +1000,7 @@
 
   /* ═════════════ workline 북마크에서 데이터 받기 ═════════════
    * workline.kr 에서 북마크를 누르면 이 창이 #wl-import 로 열리고,
-   * 북마크가 받은 엑셀(전체정산관리 현재·OD)과 정산내역서 zip 을 postMessage 로 보내요.
+   * 북마크가 받은 엑셀(전체정산관리)과 정산내역서 zip 을 postMessage 로 보내요.
    * workline.kr 에서 온 메시지만 받아요. */
   var WL_ORIGIN = 'https://workline.kr';
   var pendingImport = null, importDone = false, importing = false;
@@ -1062,7 +1062,7 @@
       })
       .then(function (x) {
         var rows = [], parts = [];
-        x.rawParts.forEach(function (p) { rows = rows.concat(p.rows); parts.push((p.src === 'od' ? 'OD ' : '지금 ') + won(p.rows.length) + '건'); });
+        x.rawParts.forEach(function (p) { rows = rows.concat(p.rows); parts.push((p.src === 'od' ? 'OD ' : '') + won(p.rows.length) + '건'); });
         rows.forEach(function (r, i) { r.No = String(i + 1); });
         var date = d.settleDate || topDate(rows);
         var rawName = 'workline 전체정산관리 ' + date + ' (' + parts.join(' + ') + ')';
