@@ -378,7 +378,7 @@
       '<div class="card upl">' +
         '<div class="steps"><i class="' + (hasRaw ? 'done' : 'on') + '"></i><i class="' + (sts.length ? 'done' : hasRaw ? 'on' : '') + '"></i><i class="' + (ready ? 'on' : '') + '"></i></div>' +
         '<h2>검수할 파일을 올려주세요</h2>' +
-        '<p class="sub">올린 파일은 회차별로 서버에 자동 저장돼서, 나중에 들어와도 이어서 할 수 있어요. 고객명·가입서비스 번호는 가려서 저장하고, 정산예정일 30일이 지나면 자동으로 비워져요.</p>' +
+        '<p class="sub">올린 파일은 회차별로 서버에 자동 저장돼서, 나중에 들어와도 이어서 할 수 있어요. 고객명·가입서비스 번호는 가려서 저장하고, 30일 동안 손대지 않은 회차는 자동으로 비워져요.</p>' +
         '<div class="syncrow" id="syncRow">' + syncLine() + '</div>' +
         '<ol class="stepl">' +
           '<li id="liRaw" class="' + (hasRaw ? 'done' : '') + (state.rawErr ? ' err' : '') + '"><span>' + (hasRaw ? ic('check', 13) : '1') + '</span><div><b>현재 로우데이터</b><small>' + rawSmall + '</small></div>' +
