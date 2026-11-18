@@ -1070,6 +1070,7 @@
         var badSt = x.stmts.length - okSt.length;
         impLog('로우데이터 ' + won(rows.length) + '건 (' + parts.join(' + ') + ')', 'ok');
         impLog('정산내역서 ' + won(okSt.length) + '개' + (badSt ? ' · 읽지 못한 파일 ' + badSt + '개' : ''), badSt ? 'err' : 'ok');
+        x.stmts.filter(function (s) { return s.error; }).slice(0, 5).forEach(function (s) { impLog('읽지 못함: ' + s.name + ' — ' + s.error, 'err'); });
         impLog(date + ' 회차 작업 여는 중...');
         return Api.workOpen(date).then(function (w) {
           // 같은 회차에 올려둔 파일이 있으면 비우고 새로 받은 것으로 바꿈
