@@ -71,6 +71,8 @@ test('자점(번호.이름 협력점)은 검수 대상에서 뺀다', () => {
   assert.deepStrictEqual(res.excluded.partners, ['1.시흥영업팀', '12.천안영업팀']);
   assert.ok(!res.partners.some(p => /^\d+\./.test(p.key)));
   assert.strictEqual(Engine.isOwnBranch('★(휴)가상○'), false);
+  assert.strictEqual(Engine.isOwnBranch('★백메가○'), true);
+  assert.strictEqual(Engine.isOwnBranch('★오백메가●'), false);
 });
 
 test('가입서비스 앞뒤 괄호 메모·공백이 달라도 같은 건으로 매칭', () => {

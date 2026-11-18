@@ -197,7 +197,9 @@ var Engine = (function () {
   }
 
   // 자점(직영): 협력점명이 '1.시흥영업팀'처럼 번호+점으로 시작하면 검수 대상에서 뺌
-  function isOwnBranch(p) { return /^\d+\s*\./.test(normPartner(p)); }
+  // 검수 제외: 자점(1.시흥영업팀 처럼 번호+점) + 따로 빼기로 한 업체(이름이 정확히 같을 때만. '오백메가'는 검수 대상)
+  var EXCLUDE_PARTNERS = ['백메가'];
+  function isOwnBranch(p) { var n = normPartner(p); return /^\d+\s*\./.test(n) || EXCLUDE_PARTNERS.indexOf(n) >= 0; }
 
   function run(rawRowsAll, stmtRowsAll) {
     var own = {}, ownRaw = 0, ownSt = 0;

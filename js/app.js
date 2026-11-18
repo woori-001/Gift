@@ -636,7 +636,7 @@
   function renderNotes() {
     var r = state.res, m = r.meta, out = (r.notes || []).slice(), n = noStNote(); if (n) out.push(n);
     var ex = m.excluded;
-    if (ex && (ex.raw || ex.stmt)) out.push(['own', '자점 <b>' + ex.partners.length + '곳</b>(로우 ' + won(ex.raw) + '건' + (ex.stmt ? ' · 정산서 ' + won(ex.stmt) + '건' : '') + ')은 검수에서 뺐어요.' +
+    if (ex && (ex.raw || ex.stmt)) out.push(['own', '자점·제외 업체 <b>' + ex.partners.length + '곳</b>(로우 ' + won(ex.raw) + '건' + (ex.stmt ? ' · 정산서 ' + won(ex.stmt) + '건' : '') + ')은 검수에서 뺐어요.' +
       '<span class="rnames">' + ex.partners.map(esc).join(', ') + '</span>']);
     var html = '';
     if (state.mode === 'demo') html += '<div class="rcard rdemo"><div class="rh">' + ic('info') + '<b>예시 데이터</b></div><p>가상의 예시예요. 저장되지 않아요.</p><button class="linkb" id="bDemoClear">예시 지우기</button></div>';
@@ -651,7 +651,7 @@
       '<dt>로우데이터</dt><dd>' + won(m.rawRows) + '건' + (m.rawFile ? '<small>' + esc(m.rawFile) + '</small>' : '') + '</dd>' +
       '<dt>정산내역서</dt><dd>' + won(m.stmtFiles) + '개 · ' + won(m.stmtRows) + '건</dd>' +
       '<dt>매칭</dt><dd>' + won(m.matched) + '건</dd>' +
-      (ex && ex.raw ? '<dt>자점 제외</dt><dd>' + won(ex.raw) + '건</dd>' : '') +
+      (ex && ex.raw ? '<dt>자점·제외 업체</dt><dd>' + won(ex.raw) + '건</dd>' : '') +
       '</dl></div>';
     html += '<div class="rcard"><div class="rh">' + ic('alert') + '<b>확인할 점</b>' + (out.length ? '<span class="snum">' + out.length + '</span>' : '') + '</div>' +
       (out.length ? '<div class="rnotes">' + out.map(function (x) {
