@@ -1060,8 +1060,17 @@
     return new Promise(function (r) { setTimeout(r, 30); })
       .then(function () { return Promise.all(raws.map(function (r) { return readBuffer(r.buf).then(function (rows) { return { src: r.source, name: r.name, rows: rows }; }); })); })
       .then(function (rawParts) {
-        impLog('정산내역서 압축 푸는 중...');
-        return (d.stmtZip ? unzipStatements(d.stmtZip.buf) : Promise.resolve([])).then(function (stmts) { return { rawParts: rawParts, stmts: stmts }; });
+        var stP;
+        if (d.stmts && d.stmts.length) {  // v2: 정산서 파일을 하나씩 받아온 경우
+          impLog('정산내역서 ' + won(d.stmts.length) + '개 읽는 중...');
+          stP = Promise.all(d.stmts.map(function (f) {
+            return readBuffer(f.buf).then(function (rows) { return { name: f.name, rows: rows }; }, function (err) { return { name: f.name, rows: [], error: err.message }; });
+          }));
+        } else {
+          impLog('정산내역서 압축 푸는 중...');
+          stP = d.stmtZip ? unzipStatements(d.stmtZip.buf) : Promise.resolve([]);
+        }
+        return stP.then(function (stmts) { return { rawParts: rawParts, stmts: stmts }; });
       })
       .then(function (x) {
         var rows = [], parts = [];
