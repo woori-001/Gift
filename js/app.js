@@ -184,6 +184,9 @@
   function readBuffer(buf) { return parseBuffer(buf).then(maskRows); }  // 읽자마자 번호를 가려서, 화면·저장·비교 모두 같은 값으로
   function parseBuffer(buf) {
     return Promise.resolve(buf).then(function (buf) {
+      // 문서보안(DRM)으로 암호화된 파일: 'BMS DocuRay' 로 시작 (8월 이전 정산내역서가 이렇게 저장돼 있음)
+      var head = String.fromCharCode.apply(null, new Uint8Array(buf.slice(0, 11)));
+      if (head === 'BMS DocuRay') throw new Error('문서보안(DRM)으로 잠긴 파일이라 읽을 수 없어요');
       var text = decodeText(buf);
       if (text) return Engine.gridToRecords(Engine.htmlToGrid(text));
       if (typeof XLSX === 'undefined') throw new Error('엑셀 해석 라이브러리를 불러오지 못했어요. 인터넷 연결을 확인하세요.');
@@ -1070,7 +1073,9 @@
         var badSt = x.stmts.length - okSt.length;
         impLog('로우데이터 ' + won(rows.length) + '건 (' + parts.join(' + ') + ')', 'ok');
         impLog('정산내역서 ' + won(okSt.length) + '개' + (badSt ? ' · 읽지 못한 파일 ' + badSt + '개' : ''), badSt ? 'err' : 'ok');
-        x.stmts.filter(function (s) { return s.error; }).slice(0, 5).forEach(function (s) { impLog('읽지 못함: ' + s.name + ' — ' + s.error, 'err'); });
+        var drm = x.stmts.filter(function (s) { return /DRM/.test(s.error || ''); }).length;
+        if (drm) impLog('정산내역서 ' + won(drm) + '개가 문서보안(DRM)으로 잠겨 있어요. workline 에 8월 이전 정산서는 잠긴 채로 저장돼 있어서 웹에서 읽을 수 없어요.', 'err');
+        x.stmts.filter(function (s) { return s.error && !/DRM/.test(s.error); }).slice(0, 5).forEach(function (s) { impLog('읽지 못함: ' + s.name + ' — ' + s.error, 'err'); });
         impLog(date + ' 회차 작업 여는 중...');
         return Api.workOpen(date).then(function (w) {
           // 같은 회차에 올려둔 파일이 있으면 비우고 새로 받은 것으로 바꿈
