@@ -201,7 +201,9 @@ var Engine = (function () {
   var EXCLUDE_PARTNERS = ['백메가'];
   function isOwnBranch(p) { var n = normPartner(p); return /^\d+\s*\./.test(n) || EXCLUDE_PARTNERS.indexOf(n) >= 0; }
 
-  function run(rawRowsAll, stmtRowsAll) {
+  // opts.extraDates: 정산서에 안 적혀 있어도 이번 회차로 볼 정산예정일 (명절 2주 정산 때 앞 주 날짜)
+  function run(rawRowsAll, stmtRowsAll, opts) {
+    opts = opts || {};
     var own = {}, ownRaw = 0, ownSt = 0;
     var rawRows = rawRowsAll.filter(function (r) { if (isOwnBranch(r.협력점)) { own[r._partner] = (own[r._partner] || 0) + 1; ownRaw++; return false; } return true; });
     var stmtRows = stmtRowsAll.filter(function (r) { if (isOwnBranch(r.협력점)) { own[r._partner] = own[r._partner] || 0; ownSt++; return false; } return true; });
@@ -243,6 +245,7 @@ var Engine = (function () {
 
     // 누락은 올린 정산서의 정산예정일(회차)에 해당하는 로우만 판단. 다른 회차 로우는 따로 셈
     var stDates = {}; stmtRows.forEach(function (r) { if (r.정산예정일) stDates[r.정산예정일] = 1; });
+    if (Object.keys(stDates).length) (opts.extraDates || []).forEach(function (d) { stDates[d] = 1; });
     var hasDates = Object.keys(stDates).length > 0, otherRound = { count: 0, dates: {} };
     // 환수는 일반 건을 복사해서 달리기 때문에 현금(사은품)이 같이 보여도 사은품 차감이 없는 게 정상 → 사은품 지급으로 안 봄.
     // 다만 정산서에 환수 줄이 없으면 환수가 정산에 안 들어간 것이라 누락으로 보여줌

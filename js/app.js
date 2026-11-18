@@ -437,7 +437,8 @@
       var stRows = [];
       okStmts().forEach(function (s) { s.rows.forEach(function (r) { r._file = s.name; stRows.push(r); }); });
       var raw = state.raw.map(function (r) { var o = {}; for (var k in r) o[k] = r[k]; return o; });
-      var res = Engine.run(raw, stRows);
+      var two = /^workline 전체정산관리 (\d{4}-\d{2}-\d{2})~(\d{4}-\d{2}-\d{2})/.exec(state.rawName || '');
+      var res = Engine.run(raw, stRows, { extraDates: two ? [two[1], two[2]] : [] });
       var dates = {}; raw.forEach(function (r) { if (r.정산예정일) dates[r.정산예정일] = (dates[r.정산예정일] || 0) + 1; });
       res.meta = {
         settleDate: topDate(stRows) || Object.keys(dates).sort(function (a, b) { return dates[b] - dates[a]; })[0] || '',
@@ -461,7 +462,7 @@
       out.push(['info', '로우데이터에 다른 회차 건이 섞여 있어요. 누락은 올린 정산서 회차(<b>' + esc(res.roundDates.join(', ')) + '</b>)에 해당하는 건만 봤고, 다른 회차 <b>' + won(o.count) + '건</b>은 뺐어요.' +
         '<span class="rnames">' + od.map(function (d) { return esc(d) + ' ' + won(o.dates[d]) + '건'; }).join(', ') + '</span>']);
     }
-    if (Object.keys(sd).length > 1) out.push(['warn', '정산내역서에 정산예정일이 ' + Object.keys(sd).length + '개 섞여 있어요 (' + esc(Object.keys(sd).sort().join(', ')) + '). 다른 회차 파일이 섞였는지 확인하세요.']);
+    if (Object.keys(sd).length > 1) out.push(['warn', '정산내역서에 정산예정일이 ' + Object.keys(sd).length + '개 섞여 있어요 (' + esc(Object.keys(sd).sort().join(', ')) + '). ' + (/2주 정산/.test(state.rawName || '') ? '명절 2주 정산 회차라 정상이에요.' : '명절 등 2주 몰아서 정산한 회차면 정상이고, 아니면 다른 회차 파일이 섞였는지 확인하세요.')]);
     if (extra.length) out.push(['warn', '정산내역서 회차(' + esc(extra.join(', ')) + ')가 로우데이터에 없어요. 로우데이터를 그 회차가 들어가게 받았는지 확인하세요.']);
     return out;
   }
@@ -1077,7 +1078,8 @@
         x.rawParts.forEach(function (p) { rows = rows.concat(p.rows); parts.push((p.src === 'od' ? 'OD ' : '') + won(p.rows.length) + '건'); });
         rows.forEach(function (r, i) { r.No = String(i + 1); });
         var date = d.settleDate || topDate(rows);
-        var rawName = 'workline 전체정산관리 ' + date + ' (' + parts.join(' + ') + ')';
+        var two = d.settleFrom && d.settleFrom !== date;
+        var rawName = 'workline 전체정산관리 ' + (two ? d.settleFrom + '~' : '') + date + ' (' + (two ? '2주 정산 · ' : '') + parts.join(' + ') + ')';
         var okSt = x.stmts.filter(function (s) { return !s.error && s.rows.length; });
         var badSt = x.stmts.length - okSt.length;
         impLog('로우데이터 ' + won(rows.length) + '건 (' + parts.join(' + ') + ')', 'ok');

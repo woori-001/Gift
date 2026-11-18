@@ -163,3 +163,15 @@ test('정산서에 없는 환수 건은 누락이지만 사은품 지급으로 �
   assert.equal(res.missing[0].raw.정산종류, '환수');
   assert.equal(res.missing[0].paid, 0);
 });
+
+test('2주 정산: 정산서에 없는 앞 주 정산예정일도 회차로 봄', () => {
+  const st = toRecords([row({ 고객명: '한가람', 가입서비스: 'z!1', 상품명: 'KT_인터넷', 협력점: '★가상○', 정산예정일: '2026-10-02' })]);
+  const raw = toRecords([
+    row({ 고객명: '한*람', 가입서비스: 'z!1', 상품명: 'KT_인터넷', 협력점: '★가상○', 정산예정일: '2026-10-02' }),
+    row({ 고객명: '두*리', 가입서비스: 'z!2', 상품명: 'KT_인터넷', 협력점: '★가상○', 정산예정일: '2026-09-25' })
+  ]);
+  assert.equal(Engine.run(raw, st).missing.length, 0);
+  const res = Engine.run(raw, st, { extraDates: ['2026-09-25', '2026-10-02'] });
+  assert.equal(res.missing.length, 1);
+  assert.equal(res.otherRound.count, 0);
+});
